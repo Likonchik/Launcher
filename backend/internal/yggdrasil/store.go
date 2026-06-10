@@ -1,8 +1,13 @@
 package yggdrasil
 
 import (
+	"log/slog"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
+
+	"launcher-backend/internal/models"
 )
 
 const (
@@ -34,22 +39,104 @@ type JoinRecord struct {
 	expiresAt time.Time
 }
 
-// Store держит активные сессии и join-записи в памяти с TTL.
+// Store держит активные сессии и join-записи в памяти с TTL. При наличии БД
+// мутации дублируются write-through в таблицы (best-effort), а при старте
+// живые записи восстанавливаются — рестарт backend не выкидывает игроков.
 type Store struct {
 	mu       sync.Mutex
+	db       *gorm.DB              // nil — без персиста (тесты, отдельные сценарии)
 	sessions map[string]Session    // accessToken -> session
 	joins    map[string]JoinRecord // serverId -> join
 	nonces   map[string]string     // nonce -> accessToken (для confirm от агентов)
 }
 
-func NewStore() *Store {
+func NewStore(db *gorm.DB) *Store {
 	s := &Store{
+		db:       db,
 		sessions: make(map[string]Session),
 		joins:    make(map[string]JoinRecord),
 		nonces:   make(map[string]string),
 	}
+	s.restore()
 	go s.collectGarbage()
 	return s
+}
+
+// restore загружает живые сессии и join-записи после рестарта backend.
+func (s *Store) restore() {
+	if s.db == nil {
+		return
+	}
+	now := time.Now()
+	var sessions []models.YggdrasilSession
+	if err := s.db.Where("expires_at > ?", now).Find(&sessions).Error; err != nil {
+		slog.Warn("yggdrasil: restore sessions failed", "error", err)
+	}
+	for _, row := range sessions {
+		sess := Session{
+			AccessToken: row.AccessToken, ClientToken: row.ClientToken,
+			UUID: row.UUID, Name: row.Name, Nonce: row.Nonce,
+			Verified: row.Verified, expiresAt: row.ExpiresAt,
+		}
+		s.sessions[sess.AccessToken] = sess
+		if sess.Nonce != "" {
+			s.nonces[sess.Nonce] = sess.AccessToken
+		}
+	}
+	var joins []models.YggdrasilJoin
+	if err := s.db.Where("expires_at > ?", now).Find(&joins).Error; err != nil {
+		slog.Warn("yggdrasil: restore joins failed", "error", err)
+	}
+	for _, row := range joins {
+		s.joins[row.ServerID] = JoinRecord{UUID: row.UUID, Name: row.Name, IP: row.IP, expiresAt: row.ExpiresAt}
+	}
+	if len(sessions) > 0 || len(joins) > 0 {
+		slog.Info("yggdrasil: sessions restored", "sessions", len(sessions), "joins", len(joins))
+	}
+}
+
+// persistSession/deleteSession/persistJoin/deleteJoin — best-effort запись в БД:
+// ошибка персиста не ломает игровой путь, только логируется.
+func (s *Store) persistSession(sess Session) {
+	if s.db == nil {
+		return
+	}
+	row := models.YggdrasilSession{
+		AccessToken: sess.AccessToken, ClientToken: sess.ClientToken,
+		UUID: sess.UUID, Name: sess.Name, Nonce: sess.Nonce,
+		Verified: sess.Verified, ExpiresAt: sess.expiresAt,
+	}
+	if err := s.db.Save(&row).Error; err != nil {
+		slog.Warn("yggdrasil: persist session failed", "error", err)
+	}
+}
+
+func (s *Store) deleteSession(token string) {
+	if s.db == nil {
+		return
+	}
+	if err := s.db.Delete(&models.YggdrasilSession{}, "access_token = ?", token).Error; err != nil {
+		slog.Warn("yggdrasil: delete session failed", "error", err)
+	}
+}
+
+func (s *Store) persistJoin(serverID string, rec JoinRecord) {
+	if s.db == nil {
+		return
+	}
+	row := models.YggdrasilJoin{ServerID: serverID, UUID: rec.UUID, Name: rec.Name, IP: rec.IP, ExpiresAt: rec.expiresAt}
+	if err := s.db.Save(&row).Error; err != nil {
+		slog.Warn("yggdrasil: persist join failed", "error", err)
+	}
+}
+
+func (s *Store) deleteJoin(serverID string) {
+	if s.db == nil {
+		return
+	}
+	if err := s.db.Delete(&models.YggdrasilJoin{}, "server_id = ?", serverID).Error; err != nil {
+		slog.Warn("yggdrasil: delete join failed", "error", err)
+	}
 }
 
 func (s *Store) PutSession(sess Session) {
@@ -60,6 +147,7 @@ func (s *Store) PutSession(sess Session) {
 	if sess.Nonce != "" {
 		s.nonces[sess.Nonce] = sess.AccessToken
 	}
+	s.persistSession(sess)
 }
 
 // MarkVerifiedByNonce помечает сессию, связанную с nonce, как прошедшую античит.
@@ -82,6 +170,7 @@ func (s *Store) MarkVerifiedByNonce(nonce string) bool {
 	}
 	sess.Verified = true
 	s.sessions[token] = sess
+	s.persistSession(sess)
 	return true
 }
 
@@ -112,6 +201,8 @@ func (s *Store) ReplaceToken(oldToken, newToken string) (Session, bool) {
 	if sess.Nonce != "" {
 		s.nonces[sess.Nonce] = newToken
 	}
+	s.deleteSession(oldToken)
+	s.persistSession(sess)
 	return sess, true
 }
 
@@ -130,6 +221,7 @@ func (s *Store) InvalidateByNonce(nonce string) bool {
 	delete(s.nonces, nonce)
 	if _, ok := s.sessions[token]; ok {
 		delete(s.sessions, token)
+		s.deleteSession(token)
 		return true
 	}
 	return false
@@ -142,6 +234,7 @@ func (s *Store) Invalidate(accessToken string) {
 		delete(s.nonces, sess.Nonce)
 	}
 	delete(s.sessions, accessToken)
+	s.deleteSession(accessToken)
 }
 
 // TouchSession продлевает срок жизни сессии (sliding TTL): пока игрок активно
@@ -152,6 +245,7 @@ func (s *Store) TouchSession(accessToken string) {
 	if sess, ok := s.sessions[accessToken]; ok {
 		sess.expiresAt = time.Now().Add(sessionTTL)
 		s.sessions[accessToken] = sess
+		s.persistSession(sess)
 	}
 }
 
@@ -160,6 +254,7 @@ func (s *Store) PutJoin(serverID string, record JoinRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.joins[serverID] = record
+	s.persistJoin(serverID, record)
 }
 
 // ConsumeJoin возвращает join-запись и сразу удаляет её — один join проверяется
@@ -169,6 +264,7 @@ func (s *Store) ConsumeJoin(serverID string) (JoinRecord, bool) {
 	defer s.mu.Unlock()
 	record, ok := s.joins[serverID]
 	delete(s.joins, serverID)
+	s.deleteJoin(serverID)
 	if !ok || time.Now().After(record.expiresAt) {
 		return JoinRecord{}, false
 	}
@@ -190,6 +286,14 @@ func (s *Store) collectGarbage() {
 		for serverID, record := range s.joins {
 			if now.After(record.expiresAt) {
 				delete(s.joins, serverID)
+			}
+		}
+		if s.db != nil {
+			if err := s.db.Delete(&models.YggdrasilSession{}, "expires_at <= ?", now).Error; err != nil {
+				slog.Warn("yggdrasil: gc sessions failed", "error", err)
+			}
+			if err := s.db.Delete(&models.YggdrasilJoin{}, "expires_at <= ?", now).Error; err != nil {
+				slog.Warn("yggdrasil: gc joins failed", "error", err)
 			}
 		}
 		s.mu.Unlock()

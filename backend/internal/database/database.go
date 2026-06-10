@@ -51,5 +51,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.BotAuditLog{},
 		&models.BotDialogue{},
 		&models.Session{},
+		// Yggdrasil: игровые сессии переживают рестарт backend.
+		&models.YggdrasilSession{},
+		&models.YggdrasilJoin{},
 	)
 }
