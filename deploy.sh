@@ -16,12 +16,18 @@
 
 set -euo pipefail
 
-VPS="root@13.140.17.105"
-DIR="/root/Launcher"
-BRANCH="main"
+VPS="${DEPLOY_VPS:-root@13.140.17.105}"
+DIR="${DEPLOY_DIR:-/root/Launcher}"
+BRANCH="${DEPLOY_BRANCH:-main}"
 
 cyan() { printf '\033[36m%s\033[0m\n' "$1"; }
 green() { printf '\033[32m%s\033[0m\n' "$1"; }
+
+cyan "→ [0/3] Тесты backend (в Docker)..."
+docker run --rm \
+  -v "$(cd "$(dirname "$0")" && pwd)/backend":/src -w /src \
+  -v launcher_gomodcache:/go/pkg/mod -v launcher_gocache:/root/.cache/go-build \
+  golang:1.26-bookworm go test ./...
 
 cyan "→ [1/3] Пуш ветки ${BRANCH} в GitHub..."
 git push origin "${BRANCH}"

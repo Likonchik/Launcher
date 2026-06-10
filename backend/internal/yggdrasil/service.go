@@ -27,7 +27,7 @@ type Service struct {
 func NewService(db *gorm.DB, keys *KeyPair, baseURL, serverName, injectorPath string) *Service {
 	return &Service{
 		db:           db,
-		store:        NewStore(),
+		store:        NewStore(db),
 		keys:         keys,
 		baseURL:      strings.TrimRight(baseURL, "/"),
 		serverName:   serverName,
