@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { AppFrame } from './ui/app-frame';
+import { AppFrame } from '../components/shell/app-frame';
 
 export const metadata: Metadata = {
   title: 'Project Minecraft Admin',
@@ -14,10 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ru">
-      <head>
-        <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
-      </head>
-      <body>
+      <body className="antialiased">
         <AppFrame>{children}</AppFrame>
       </body>
     </html>
