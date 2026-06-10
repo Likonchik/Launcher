@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 type Config struct {
 	AppEnv              string
+	LogLevel            string
 	ServerAddr          string
 	AuthMode            string
 	AuthProviderURL     string
@@ -37,6 +39,7 @@ func Load() Config {
 
 	cfg := Config{
 		AppEnv:          env("APP_ENV", "development"),
+		LogLevel:        strings.ToLower(env("LOG_LEVEL", "info")),
 		ServerAddr:      env("SERVER_ADDR", "127.0.0.1:8080"),
 		// AUTH_MODE: local — логин валидируется в общей БД (bcrypt+TOTP); http — внешний GML-провайдер.
 		AuthMode:        strings.ToLower(env("AUTH_MODE", "local")),
@@ -78,6 +81,37 @@ func Load() Config {
 	}
 
 	return cfg
+}
+
+// devSecrets — известные дефолты, с которыми нельзя выходить в прод.
+var devSecrets = map[string]bool{
+	"dev-only-change-me":      true,
+	"change-me-in-production": true,
+}
+
+// Validate отклоняет конфигурацию, с которой опасно стартовать в production.
+func (c Config) Validate() error {
+	if c.AppEnv != "production" {
+		return nil
+	}
+	if devSecrets[c.JWTSecret] {
+		return errors.New("APP_ENV=production требует настоящий JWT_SECRET (сейчас дев-заглушка)")
+	}
+	return nil
+}
+
+// SlogLevel переводит LOG_LEVEL в slog.Level (debug/info/warn/error).
+func (c Config) SlogLevel() slog.Level {
+	switch c.LogLevel {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }
 
 func atoiDefault(value string, fallback int) int {

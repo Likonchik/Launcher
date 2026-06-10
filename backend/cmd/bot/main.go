@@ -29,6 +29,9 @@ func main() {
 func run(log *slog.Logger) error {
 	// Общий конфиг backend даёт строку подключения к БД (DATABASE_URL/SQLITE_PATH).
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		return err
+	}
 	db, err := database.Open(cfg)
 	if err != nil {
 		return err
