@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import { AppFrame } from './ui/app-frame';
+import { AppFrame } from '../components/shell/app-frame';
 
 export const metadata: Metadata = {
   title: 'Project Minecraft Admin',
