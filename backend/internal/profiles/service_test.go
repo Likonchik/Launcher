@@ -1,0 +1,235 @@
+package profiles
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"launcher-backend/internal/models"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func TestScanBuildsManifest(t *testing.T) {
+	service := newTestService(t)
+	profile, err := service.Create(context.Background(), ProfileRequest{
+		Name:        "Project Test",
+		Slug:        "project-test",
+		Loader:      "fabric",
+		GameVersion: "1.21.1",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	filesRoot := filepath.Join(service.storageRoot, profile.Slug, "files")
+	writeTestFile(t, filepath.Join(filesRoot, "mods", "example.jar"), "mod-data")
+	writeTestFile(t, filepath.Join(filesRoot, "runtime", "linux", "bin", "java"), "java")
+
+	result, err := service.Scan(context.Background(), profile.ID)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if result.FileCount != 2 {
+		t.Fatalf("FileCount = %d, want 2", result.FileCount)
+	}
+	if result.TotalSize != int64(len("mod-data")+len("java")) {
+		t.Fatalf("TotalSize = %d", result.TotalSize)
+	}
+
+	manifest, err := service.Manifest(context.Background(), profile.ID)
+	if err != nil {
+		t.Fatalf("Manifest() error = %v", err)
+	}
+	if manifest.FileCount != 2 {
+		t.Fatalf("manifest.FileCount = %d, want 2", manifest.FileCount)
+	}
+	if manifest.Files[0].Path != "mods/example.jar" {
+		t.Fatalf("first manifest path = %q", manifest.Files[0].Path)
+	}
+	if _, err := service.Download(context.Background(), profile.ID, "../escape.jar"); err == nil {
+		t.Fatal("Download() accepted path traversal")
+	}
+}
+
+func TestScanHandlesLargeFileCount(t *testing.T) {
+	service := newTestService(t)
+	profile, err := service.Create(context.Background(), ProfileRequest{
+		Name:        "Project Test",
+		Slug:        "project-test",
+		Loader:      "fabric",
+		GameVersion: "1.21.1",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// Превышаем SQLITE_MAX_VARIABLE_NUMBER: 8 колонок * fileCount должно
+	// уходить за лимит одиночного INSERT (32766 на современных сборках SQLite).
+	const fileCount = 5000
+	filesRoot := filepath.Join(service.storageRoot, profile.Slug, "files")
+	for i := 0; i < fileCount; i++ {
+		writeTestFile(t, filepath.Join(filesRoot, "mods", fmt.Sprintf("mod-%d.jar", i)), "data")
+	}
+
+	result, err := service.Scan(context.Background(), profile.ID)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if result.FileCount != fileCount {
+		t.Fatalf("FileCount = %d, want %d", result.FileCount, fileCount)
+	}
+}
+
+func TestScanRejectsSymlink(t *testing.T) {
+	service := newTestService(t)
+	profile, err := service.Create(context.Background(), ProfileRequest{
+		Name:        "Project Test",
+		Slug:        "project-test",
+		Loader:      "fabric",
+		GameVersion: "1.21.1",
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	filesRoot := filepath.Join(service.storageRoot, profile.Slug, "files")
+	writeTestFile(t, filepath.Join(filesRoot, "real.jar"), "data")
+	if err := os.Symlink(filepath.Join(filesRoot, "real.jar"), filepath.Join(filesRoot, "linked.jar")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+
+	_, err = service.Scan(context.Background(), profile.ID)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("Scan() error = %v, want symlink rejection", err)
+	}
+}
+
+func TestScanSkipsPreservedPathsAndManifestReturnsWhitelist(t *testing.T) {
+	service := newTestService(t)
+	profile, err := service.Create(context.Background(), ProfileRequest{
+		Name:          "Project Test",
+		Slug:          "project-test",
+		Loader:        "fabric",
+		GameVersion:   "1.21.1",
+		PreservePaths: []string{"saves/", "options.txt"},
+	})
+	if err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	filesRoot := filepath.Join(service.storageRoot, profile.Slug, "files")
+	writeTestFile(t, filepath.Join(filesRoot, "mods", "example.jar"), "mod-data")
+	writeTestFile(t, filepath.Join(filesRoot, "saves", "world", "level.dat"), "save-data")
+	writeTestFile(t, filepath.Join(filesRoot, "options.txt"), "options")
+
+	result, err := service.Scan(context.Background(), profile.ID)
+	if err != nil {
+		t.Fatalf("Scan() error = %v", err)
+	}
+	if result.FileCount != 1 {
+		t.Fatalf("FileCount = %d, want 1", result.FileCount)
+	}
+
+	manifest, err := service.Manifest(context.Background(), profile.ID)
+	if err != nil {
+		t.Fatalf("Manifest() error = %v", err)
+	}
+	if manifest.FileCount != 1 || manifest.Files[0].Path != "mods/example.jar" {
+		t.Fatalf("manifest files = %#v, want only mods/example.jar", manifest.Files)
+	}
+	if !equalStrings(manifest.PreservePaths, []string{"saves/", "options.txt"}) {
+		t.Fatalf("PreservePaths = %#v", manifest.PreservePaths)
+	}
+}
+
+func TestPreservePathsRejectUnsafeAndReservedPaths(t *testing.T) {
+	service := newTestService(t)
+	values := []string{
+		"",
+		"../escape",
+		"/absolute",
+		"mods/",
+		"libraries/example.jar",
+		"versions/1.21.1/1.21.1.jar",
+		"assets/indexes/1.json",
+		"runtime/linux/bin/java",
+		"C:/Users/player/options.txt",
+	}
+
+	for _, value := range values {
+		_, err := service.Create(context.Background(), ProfileRequest{
+			Name:          "Project Test " + strings.ReplaceAll(value, "/", "-"),
+			Slug:          "project-test",
+			Loader:        "fabric",
+			GameVersion:   "1.21.1",
+			PreservePaths: []string{value},
+		})
+		if err == nil {
+			t.Fatalf("Create() accepted preserve path %q", value)
+		}
+	}
+}
+
+func TestClientPreparedAcceptsInstalledNeoForgeVersionJSON(t *testing.T) {
+	service := NewService(nil, t.TempDir())
+	profile := models.Profile{
+		Name:          "Project Test",
+		Slug:          "project-test",
+		Loader:        "neoforge",
+		GameVersion:   "1.21.1",
+		LoaderVersion: "21.1.233",
+	}
+	filesRoot := filepath.Join(service.storageRoot, profile.Slug, "files")
+	writeTestFile(t, filepath.Join(filesRoot, "versions", "1.21.1", "1.21.1.json"), "{}")
+	writeTestFile(t, filepath.Join(filesRoot, "versions", "1.21.1", "1.21.1.jar"), "client")
+	writeTestFile(
+		t,
+		filepath.Join(filesRoot, "versions", "neoforge-21.1.233", "neoforge-21.1.233.json"),
+		`{"id":"neoforge-21.1.233","inheritsFrom":"1.21.1"}`,
+	)
+
+	if !service.clientPrepared(profile) {
+		t.Fatal("clientPrepared() = false, want true for installed NeoForge version JSON")
+	}
+}
+
+func equalStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func newTestService(t *testing.T) Service {
+	t.Helper()
+
+	dsn := "file:" + strings.ReplaceAll(t.Name(), "/", "_") + "?mode=memory&cache=shared"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	if err := db.AutoMigrate(&models.Profile{}, &models.GameFile{}); err != nil {
+		t.Fatalf("AutoMigrate: %v", err)
+	}
+	return NewService(db, t.TempDir())
+}
+
+func writeTestFile(t *testing.T, path string, data string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", path, err)
+	}
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", path, err)
+	}
+}

@@ -1,0 +1,200 @@
+package config
+
+import (
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type Config struct {
+	AppEnv              string
+	ServerAddr          string
+	AuthMode            string
+	AuthProviderURL     string
+	DatabaseURL         string
+	JWTSecret           string
+	SQLitePath          string
+	AllowedOrigins      []string
+	AdminLogins         []string
+	ProfileStorageRoot  string
+	TelegramChannel     string
+	PublicBaseURL       string
+	YggdrasilKeyPath    string
+	YggdrasilServerName string
+	AuthlibInjectorPath string
+	AnticheatSecret      string
+	AnticheatAutoBan     bool
+	AnticheatAgentPath   string
+	AnticheatNativeLinux  string
+	AnticheatNativeWin    string
+	AnticheatKickSeverity int
+}
+
+func Load() Config {
+	loadDotEnv(".env")
+	loadDotEnv(filepath.Join("backend", ".env"))
+
+	cfg := Config{
+		AppEnv:          env("APP_ENV", "development"),
+		ServerAddr:      env("SERVER_ADDR", "127.0.0.1:8080"),
+		// AUTH_MODE: local — логин валидируется в общей БД (bcrypt+TOTP); http — внешний GML-провайдер.
+		AuthMode:        strings.ToLower(env("AUTH_MODE", "local")),
+		AuthProviderURL: env("AUTH_PROVIDER_URL", "https://pjm.likonchik.xyz/api/gml/auth"),
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		JWTSecret:       env("JWT_SECRET", "dev-only-change-me"),
+		SQLitePath:      env("SQLITE_PATH", filepath.Join("data", "launcher.db")),
+		AdminLogins:     splitCSV(env("ADMIN_LOGINS", "")),
+		ProfileStorageRoot: env(
+			"PROFILE_STORAGE_ROOT",
+			filepath.Join("storage", "profiles"),
+		),
+		AllowedOrigins: splitCSV(env(
+			"ALLOWED_ORIGINS",
+			"http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:3000,http://localhost:3000",
+		)),
+		TelegramChannel:     env("TELEGRAM_NEWS_CHANNEL", "project_minecraft"),
+		PublicBaseURL:       strings.TrimRight(env("PUBLIC_BASE_URL", "http://127.0.0.1:8080"), "/"),
+		YggdrasilKeyPath:    env("YGGDRASIL_KEY_PATH", filepath.Join("data", "yggdrasil_key.pem")),
+		YggdrasilServerName: env("YGGDRASIL_SERVER_NAME", "Project Minecraft"),
+		AuthlibInjectorPath: env("AUTHLIB_INJECTOR_PATH", filepath.Join("data", "authlib-injector.jar")),
+		AnticheatSecret:     env("ANTICHEAT_SECRET", ""),
+		AnticheatAutoBan:    env("ANTICHEAT_AUTO_BAN", "false") == "true",
+		AnticheatAgentPath:   env("ANTICHEAT_AGENT_PATH", filepath.Join("data", "anticheat-agent.jar")),
+		AnticheatNativeLinux:  env("ANTICHEAT_NATIVE_LINUX", filepath.Join("data", "libanticheat.so")),
+		AnticheatNativeWin:    env("ANTICHEAT_NATIVE_WIN", filepath.Join("data", "anticheat.dll")),
+		AnticheatKickSeverity: atoiDefault(env("ANTICHEAT_KICK_SEVERITY", "7"), 7),
+	}
+
+	if cfg.JWTSecret == "dev-only-change-me" {
+		slog.Warn("using development JWT secret")
+	}
+
+	// Античит-секрет отдельный от JWT: им подписываются короткоживущие launch-token.
+	// Если не задан — деривируем из JWT-секрета, чтобы dev-окружение работало из коробки.
+	if cfg.AnticheatSecret == "" {
+		cfg.AnticheatSecret = "anticheat:" + cfg.JWTSecret
+		slog.Warn("ANTICHEAT_SECRET not set, deriving from JWT secret")
+	}
+
+	return cfg
+}
+
+func atoiDefault(value string, fallback int) int {
+	n := 0
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return fallback
+		}
+		n = n*10 + int(r-'0')
+	}
+	if value == "" {
+		return fallback
+	}
+	return n
+}
+
+func splitCSV(value string) []string {
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func env(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func loadDotEnv(path string) {
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		slog.Warn("failed to read env file", "path", path, "error", err)
+		return
+	}
+
+	for _, line := range parseEnvLines(string(data)) {
+		if os.Getenv(line.key) == "" {
+			_ = os.Setenv(line.key, line.value)
+		}
+	}
+}
+
+type envLine struct {
+	key   string
+	value string
+}
+
+func parseEnvLines(input string) []envLine {
+	lines := make([]envLine, 0)
+	for _, rawLine := range splitLines(input) {
+		line := trim(rawLine)
+		if line == "" || line[0] == '#' {
+			continue
+		}
+
+		key, value, ok := cut(line, "=")
+		if !ok || key == "" {
+			continue
+		}
+		lines = append(lines, envLine{key: trim(key), value: trimQuotes(trim(value))})
+	}
+	return lines
+}
+
+func splitLines(input string) []string {
+	lines := make([]string, 0)
+	start := 0
+	for i, ch := range input {
+		if ch == '\n' {
+			lines = append(lines, input[start:i])
+			start = i + 1
+		}
+	}
+	if start <= len(input) {
+		lines = append(lines, input[start:])
+	}
+	return lines
+}
+
+func trim(value string) string {
+	start := 0
+	for start < len(value) && (value[start] == ' ' || value[start] == '\t' || value[start] == '\r') {
+		start++
+	}
+	end := len(value)
+	for end > start && (value[end-1] == ' ' || value[end-1] == '\t' || value[end-1] == '\r') {
+		end--
+	}
+	return value[start:end]
+}
+
+func trimQuotes(value string) string {
+	if len(value) >= 2 {
+		if (value[0] == '"' && value[len(value)-1] == '"') || (value[0] == '\'' && value[len(value)-1] == '\'') {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
+}
+
+func cut(value, sep string) (string, string, bool) {
+	for i := 0; i <= len(value)-len(sep); i++ {
+		if value[i:i+len(sep)] == sep {
+			return value[:i], value[i+len(sep):], true
+		}
+	}
+	return value, "", false
+}

@@ -1,0 +1,6 @@
+storage/
+data/
+tmp/
+server
+*.db
+.env

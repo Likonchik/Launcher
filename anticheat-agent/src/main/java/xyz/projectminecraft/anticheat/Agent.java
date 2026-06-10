@@ -1,0 +1,387 @@
+package xyz.projectminecraft.anticheat;
+
+import java.lang.instrument.ClassFileTransformer;
+import java.lang.instrument.Instrumentation;
+import java.lang.management.ManagementFactory;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.security.ProtectionDomain;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+/**
+ * Игровой Java-агент античита (M3). Грузится в JVM Minecraft через -javaagent
+ * (premain), подтверждает античит-handshake (confirm) и репортит подозрительные
+ * классы/моды на бэкенд по launch-token. Зависимостей вне JDK нет.
+ *
+ * Параметры через -D: ac.token (launch-token), ac.url (базовый URL бэкенда).
+ */
+public final class Agent {
+
+    private static final Duration TIMEOUT = Duration.ofSeconds(10);
+    private static final long HEARTBEAT_PERIOD_MS = 30_000L;
+
+    // Эвристический набор маркеров известных чит-клиентов/модов. Серверный матч по
+    // полному блэклисту приедет в M5; здесь — быстрый локальный фильтр.
+    private static final String[] SUSPECT_MARKERS = {
+        "wurst", "meteorclient", "baritone", "xray", "killaura",
+        "aimbot", "liquidbounce", "impactclient", "sigmaclient", "huzuni"
+    };
+
+    private static volatile String token = "";
+    private static volatile String baseUrl = "";
+    private static volatile String kickFile = "";
+    private static final HttpClient HTTP = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
+    private static final List<String> reported = new CopyOnWriteArrayList<>();
+    // Ограничитель потока детектов нелегальных имён (защита от флуда / FP-шторма).
+    private static final java.util.concurrent.atomic.AtomicInteger illegalReports =
+        new java.util.concurrent.atomic.AtomicInteger(0);
+    private static final int MAX_ILLEGAL_REPORTS = 20;
+
+    private Agent() {}
+
+    public static void premain(String args, Instrumentation inst) {
+        token = System.getProperty("ac.token", "");
+        baseUrl = trimSlash(System.getProperty("ac.url", ""));
+        kickFile = System.getProperty("ac.kickfile", "");
+        if (token.isEmpty() || baseUrl.isEmpty()) {
+            // Без параметров агент ничего не делает (не ломаем запуск).
+            return;
+        }
+
+        // 0. Считываем состояние нативного JVMTI-агента (M4) из flag-файла.
+        NativeState nativeState = readNativeState();
+        if (!nativeState.present) {
+            // Нативный слой не загрузился — анти-инжект отключён или обойдён. Низкая
+            // severity: репортим, но НЕ кикаем (мог не подняться по легитимной причине).
+            detect("tamper", "native-agent-missing", "native flag absent", 6);
+        } else if (nativeState.debug) {
+            detect("debugger", "debugger-attached", "TracerPid/IsDebuggerPresent", 6);
+        }
+
+        // 1. Подтверждаем защиту: отправляем proof о том, что агент реально загружен.
+        confirm(inst, nativeState);
+
+        // 2. Сканируем уже загруженные классы и моды на маркеры читов.
+        scanLoadedClasses(inst);
+        scanModsDirectory();
+
+        // 3. Ловим классы, загружаемые позже (читы часто грузятся лениво).
+        inst.addTransformer(new SuspectTransformer(), false);
+
+        // 4. Поллер событий нативного агента (нелегальные имена классов и пр.):
+        //    нативный ClassFileLoadHook пишет их в <flag>.events, мы пересылаем на бэкенд.
+        String flag = System.getProperty("ac.native.flag", "");
+        if (!flag.isEmpty()) {
+            startEventPoller(flag + ".events");
+        }
+
+        // 5. Фоновый heartbeat — задел под realtime-контроль (M5).
+        startHeartbeat();
+    }
+
+    /**
+     * Имя класса считается нелегальным, если содержит символ вне набора, допустимого
+     * во внутренних именах JVM (буквы/цифры/_/$ и разделители . /). Инжекторы намеренно
+     * дают классам нелегальные имена («Naming: Illegal»), чтобы обходить детект по
+     * сигнатурам — поэтому само наличие такого имени и есть сильный признак инъекции.
+     */
+    private static boolean isIllegalClassName(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '_' || c == '$' || c == '/' || c == '.';
+            if (!ok) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void reportIllegalName(String name, String source) {
+        if (illegalReports.incrementAndGet() > MAX_ILLEGAL_REPORTS) {
+            return; // достаточно сигнала — не флудим бэкенд
+        }
+        String key = "illegal:" + name;
+        if (reported.contains(key)) {
+            return;
+        }
+        reported.add(key);
+        detect("inject", "illegal-class-name", source + ":" + name);
+    }
+
+    private static void confirm(Instrumentation inst, NativeState ns) {
+        String proof = "{"
+            + "\"loadedClasses\":" + inst.getAllLoadedClasses().length + ","
+            + "\"javaVersion\":\"" + escape(System.getProperty("java.version", "")) + "\","
+            + "\"native\":{\"present\":" + ns.present + ",\"debug\":" + ns.debug
+                + ",\"classhook\":" + ns.classhook + "},"
+            + "\"jvmArgs\":" + jsonStringArray(ManagementFactory.getRuntimeMXBean().getInputArguments())
+            + "}";
+        String body = "{\"launchToken\":\"" + escape(token) + "\",\"proof\":" + proof + "}";
+        post("/api/anticheat/handshake/confirm", body);
+    }
+
+    /** Состояние нативного JVMTI-агента, прочитанное из flag-файла. */
+    private static final class NativeState {
+        boolean present;
+        boolean debug;
+        boolean classhook;
+    }
+
+    private static NativeState readNativeState() {
+        NativeState s = new NativeState();
+        String path = System.getProperty("ac.native.flag", "");
+        if (path.isEmpty()) {
+            return s;
+        }
+        try {
+            for (String line : Files.readAllLines(Paths.get(path))) {
+                int eq = line.indexOf('=');
+                if (eq <= 0) {
+                    continue;
+                }
+                String key = line.substring(0, eq).trim();
+                boolean val = "1".equals(line.substring(eq + 1).trim());
+                switch (key) {
+                    case "present" -> s.present = val;
+                    case "debug" -> s.debug = val;
+                    case "classhook" -> s.classhook = val;
+                    default -> { /* игнор неизвестных ключей */ }
+                }
+            }
+        } catch (Exception ignored) {
+            // Файл недоступен → present остаётся false → детект native-agent-missing.
+        }
+        return s;
+    }
+
+    private static void scanLoadedClasses(Instrumentation inst) {
+        // ВАЖНО: здесь НЕ проверяем нелегальные имена. getAllLoadedClasses() включает
+        // классы-массивы (имена вида "[Lpkg.Class;") — это легальные дескрипторы JVM,
+        // а не инъекция. Инъекция происходит в рантайме и ловится в трансформере и
+        // нативном ClassFileLoadHook (туда массивы-дескрипторы не попадают).
+        for (Class<?> c : inst.getAllLoadedClasses()) {
+            String name = c.getName();
+            if (name != null && !c.isArray()) {
+                checkAndReport("class", name);
+            }
+        }
+    }
+
+    private static void scanModsDirectory() {
+        Path mods = Paths.get("mods");
+        if (!Files.isDirectory(mods)) {
+            return;
+        }
+        try (var stream = Files.list(mods)) {
+            stream.filter(p -> p.toString().toLowerCase(Locale.ROOT).endsWith(".jar"))
+                  .forEach(p -> checkAndReport("jar", p.getFileName().toString()));
+        } catch (Exception ignored) {
+            // Скан best-effort: ошибки чтения каталога не должны ронять игру.
+        }
+    }
+
+    /** Сверяет имя с маркерами и, при совпадении, шлёт детект (без дублей). */
+    private static void checkAndReport(String kind, String name) {
+        String lower = name.toLowerCase(Locale.ROOT);
+        for (String marker : SUSPECT_MARKERS) {
+            if (lower.contains(marker)) {
+                String key = kind + ":" + marker;
+                if (reported.contains(key)) {
+                    return;
+                }
+                reported.add(key);
+                detect(kind, marker, name);
+                return;
+            }
+        }
+    }
+
+    private static void detect(String type, String signature, String detail) {
+        detect(type, signature, detail, 8);
+    }
+
+    private static void detect(String type, String signature, String detail, int severity) {
+        String body = "{"
+            + "\"launchToken\":\"" + escape(token) + "\","
+            + "\"source\":\"java\","
+            + "\"type\":\"" + escape(type) + "\","
+            + "\"signature\":\"" + escape(signature) + "\","
+            + "\"severity\":" + severity + ","
+            + "\"details\":{\"name\":\"" + escape(detail) + "\"}"
+            + "}";
+        String resp = postRead("/api/anticheat/detect", body);
+        // Бэкенд решает реакцию: при kick убиваем игру и оставляем причину лаунчеру.
+        if (resp != null && resp.contains("\"action\":\"kick\"")) {
+            kickGame(signature);
+        }
+    }
+
+    /** Пишет причину кика лаунчеру и немедленно убивает JVM (halt, без shutdown-хуков). */
+    private static void kickGame(String reason) {
+        try {
+            if (!kickFile.isEmpty()) {
+                Files.write(Paths.get(kickFile),
+                    ("reason=" + reason + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            }
+        } catch (Exception ignored) {
+            // даже если файл не записался — всё равно убиваем игру
+        }
+        System.err.println("[anticheat] kick: " + reason + " — закрываю игру");
+        Runtime.getRuntime().halt(66); // 66 = код выхода «закрыто античитом»
+    }
+
+    // Поллер событий нативного агента: каждые 2с дочитывает новые строки <flag>.events
+    // и пересылает как детекты. Нативный hook видит инъекции, недоступные Java (hidden,
+    // Unsafe), и его сложнее снять, чем Java-трансформер.
+    private static void startEventPoller(String eventsPath) {
+        Thread t = new Thread(() -> {
+            long offset = 0;
+            Path path = Paths.get(eventsPath);
+            while (true) {
+                try {
+                    Thread.sleep(2000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                try {
+                    if (!Files.exists(path)) {
+                        continue;
+                    }
+                    byte[] all = Files.readAllBytes(path);
+                    if (all.length <= offset) {
+                        continue;
+                    }
+                    String chunk = new String(all, (int) offset, (int) (all.length - offset),
+                        java.nio.charset.StandardCharsets.UTF_8);
+                    offset = all.length;
+                    for (String line : chunk.split("\n")) {
+                        line = line.trim();
+                        if (line.isEmpty()) {
+                            continue;
+                        }
+                        // Формат строки: "<type>\t<name>".
+                        int tab = line.indexOf('\t');
+                        String type = tab > 0 ? line.substring(0, tab) : "inject";
+                        String name = tab > 0 ? line.substring(tab + 1) : line;
+                        if ("illegal-class-name".equals(type)) {
+                            reportIllegalName(name, "native");
+                        } else {
+                            detect("inject", type, "native:" + name, 9);
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // best-effort
+                }
+            }
+        }, "anticheat-native-events");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void startHeartbeat() {
+        Thread t = new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(HEARTBEAT_PERIOD_MS);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                post("/api/anticheat/heartbeat", "{\"launchToken\":\"" + escape(token) + "\"}");
+            }
+        }, "anticheat-heartbeat");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    private static void post(String path, String json) {
+        postRead(path, json);
+    }
+
+    /** POST с чтением тела ответа (нужно для action из /detect). null при ошибке. */
+    private static String postRead(String path, String json) {
+        try {
+            HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + path))
+                .timeout(TIMEOUT)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json))
+                .build();
+            return HTTP.send(req, HttpResponse.BodyHandlers.ofString()).body();
+        } catch (Exception ignored) {
+            // Сеть нестабильна — не роняем игру; enforcement обеспечивает сервер.
+            return null;
+        }
+    }
+
+    /** Транформер: не меняет байткод, лишь инспектирует имена загружаемых классов. */
+    private static final class SuspectTransformer implements ClassFileTransformer {
+        @Override
+        public byte[] transform(ClassLoader loader, String className, Class<?> classBeingRedefined,
+                                ProtectionDomain protectionDomain, byte[] classfileBuffer) {
+            if (className != null) {
+                // Проверяем сырое внутреннее имя (со слэшами) на нелегальные символы.
+                if (isIllegalClassName(className)) {
+                    reportIllegalName(className, "transform");
+                }
+                checkAndReport("class", className.replace('/', '.'));
+            }
+            return null; // null = байткод не изменён
+        }
+    }
+
+    private static String trimSlash(String s) {
+        if (s == null) {
+            return "";
+        }
+        while (s.endsWith("/")) {
+            s = s.substring(0, s.length() - 1);
+        }
+        return s;
+    }
+
+    private static String jsonStringArray(List<String> items) {
+        List<String> parts = new ArrayList<>(items.size());
+        for (String item : items) {
+            parts.add("\"" + escape(item) + "\"");
+        }
+        return "[" + String.join(",", parts) + "]";
+    }
+
+    private static String escape(String s) {
+        if (s == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder(s.length() + 8);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
+    }
+}

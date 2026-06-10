@@ -1,0 +1,320 @@
+package anticheat
+
+import (
+	"net/http"
+	"strconv"
+
+	"launcher-backend/internal/auth"
+	"launcher-backend/internal/models"
+	"launcher-backend/internal/yggdrasil"
+
+	"github.com/gofiber/fiber/v3"
+)
+
+type Handler struct {
+	service *Service
+}
+
+type ErrorResponse struct {
+	Message string `json:"message"`
+}
+
+func NewHandler(service *Service) Handler {
+	return Handler{service: service}
+}
+
+// RegisterRoutes монтирует игровые (JWT/launch-token) и admin-эндпоинты античита.
+func (h Handler) RegisterRoutes(app *fiber.App, authMiddleware fiber.Handler) {
+	// Авторизация навешивается per-route: group.Use(...) применялась бы по префиксу
+	// ко всем роутам /api/anticheat, включая launch-token-эндпоинты (им JWT не нужен).
+	group := app.Group("/api/anticheat")
+	// JWT-защищённые: лаунчер инициирует handshake и тянет блэклист.
+	group.Post("/handshake/init", authMiddleware, h.init)
+	group.Get("/blacklist", authMiddleware, h.blacklist)
+	// Launch-token-защищённые: confirm и репорты от лаунчера/агентов (без JWT).
+	group.Post("/handshake/confirm", h.confirm)
+	group.Post("/detect", h.detect)
+	group.Post("/heartbeat", h.heartbeat)
+	// Раздача agent.jar: лаунчер качает его и инжектит как -javaagent.
+	group.Get("/agent.jar", h.agentJar)
+	// Раздача нативной JVMTI-библиотеки по ОС: лаунчер инжектит как -agentpath.
+	group.Get("/native/:os", h.nativeLib)
+
+	// Admin: просмотр и управление.
+	admin := app.Group("/api/admin/anticheat")
+	admin.Use(authMiddleware, auth.RequireAdmin)
+	admin.Get("/detections", h.listDetections)
+	admin.Get("/bans/hwid", h.listHwidBans)
+	admin.Get("/bans/account", h.listAccountBans)
+	admin.Post("/bans/hwid", h.banHwid)
+	admin.Post("/bans/account", h.banAccount)
+	admin.Delete("/bans/hwid/:hash", h.unbanHwid)
+	admin.Delete("/bans/account/:uuid", h.unbanAccount)
+	admin.Get("/signatures", h.listSignatures)
+	admin.Post("/signatures", h.createSignature)
+	admin.Patch("/signatures/:id", h.updateSignature)
+	admin.Delete("/signatures/:id", h.deleteSignature)
+}
+
+type initRequest struct {
+	HwidHash   string           `json:"hwidHash"`
+	Detections []DetectionInput `json:"detections"`
+}
+
+func (h Handler) init(c fiber.Ctx) error {
+	user, ok := auth.CurrentUser(c)
+	if !ok {
+		return c.Status(http.StatusUnauthorized).JSON(ErrorResponse{Message: "Требуется авторизация"})
+	}
+	var req initRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Некорректный запрос"})
+	}
+	userUUID := yggdrasil.NormalizeUUID(user.ProviderUUID, user.Login)
+	result, err := h.service.InitHandshake(c.Context(), userUUID, user.Login, req.HwidHash, req.Detections)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка инициализации"})
+	}
+	if !result.Allowed {
+		// Блок запуска: лаунчер не должен стартовать игру.
+		return c.Status(http.StatusForbidden).JSON(result)
+	}
+	return c.JSON(result)
+}
+
+type confirmRequest struct {
+	LaunchToken string         `json:"launchToken"`
+	Proof       map[string]any `json:"proof"`
+}
+
+func (h Handler) confirm(c fiber.Ctx) error {
+	var req confirmRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Некорректный запрос"})
+	}
+	token := req.LaunchToken
+	if token == "" {
+		token = c.Get("X-Launch-Token")
+	}
+	if err := h.service.Confirm(token); err != nil {
+		return c.Status(http.StatusUnauthorized).JSON(ErrorResponse{Message: "Не удалось подтвердить защиту"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+type detectRequest struct {
+	LaunchToken string         `json:"launchToken"`
+	Source      string         `json:"source"`
+	Type        string         `json:"type"`
+	Signature   string         `json:"signature"`
+	Severity    int            `json:"severity"`
+	Details     map[string]any `json:"details"`
+}
+
+func (h Handler) detect(c fiber.Ctx) error {
+	var req detectRequest
+	if err := c.Bind().Body(&req); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Некорректный запрос"})
+	}
+	token := req.LaunchToken
+	if token == "" {
+		token = c.Get("X-Launch-Token")
+	}
+	claims, err := h.service.VerifyToken(token)
+	if err != nil {
+		return c.Status(http.StatusUnauthorized).JSON(ErrorResponse{Message: "Недействительный токен сессии"})
+	}
+	input := DetectionInput{
+		Source:    req.Source,
+		Type:      req.Type,
+		Signature: req.Signature,
+		Severity:  req.Severity,
+		Details:   req.Details,
+	}
+	if err := h.service.RecordDetection(c.Context(), claims, input); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось записать детект"})
+	}
+	// Решаем, кикать ли игрока: ответ читает агент и убивает JVM.
+	if kick, reason := h.service.EvaluateKick(claims, req.Severity, req.Type); kick {
+		return c.JSON(fiber.Map{"action": "kick", "reason": reason})
+	}
+	return c.JSON(fiber.Map{"action": "none"})
+}
+
+// heartbeat — периодический сигнал от Java-агента (launch-token). В M3 лишь
+// подтверждает валидность токена; проверка свежести для realtime-kick — в M5.
+func (h Handler) heartbeat(c fiber.Ctx) error {
+	var req struct {
+		LaunchToken string `json:"launchToken"`
+	}
+	_ = c.Bind().Body(&req)
+	token := req.LaunchToken
+	if token == "" {
+		token = c.Get("X-Launch-Token")
+	}
+	if _, err := h.service.VerifyToken(token); err != nil {
+		return c.Status(http.StatusUnauthorized).JSON(ErrorResponse{Message: "Недействительный токен сессии"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h Handler) agentJar(c fiber.Ctx) error {
+	path := h.service.AgentPath()
+	if path == "" {
+		return c.SendStatus(http.StatusNotFound)
+	}
+	c.Set(fiber.HeaderContentType, "application/java-archive")
+	return c.SendFile(path)
+}
+
+func (h Handler) nativeLib(c fiber.Ctx) error {
+	path := h.service.NativePath(c.Params("os"))
+	if path == "" {
+		return c.SendStatus(http.StatusNotFound)
+	}
+	c.Set(fiber.HeaderContentType, "application/octet-stream")
+	return c.SendFile(path)
+}
+
+func (h Handler) blacklist(c fiber.Ctx) error {
+	sigs, err := h.service.Blacklist(c.Context())
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось получить блэклист"})
+	}
+	return c.JSON(sigs)
+}
+
+// --- Admin ---
+
+func (h Handler) listDetections(c fiber.Ctx) error {
+	limit, _ := strconv.Atoi(c.Query("limit", ""))
+	items, err := h.service.ListDetections(c.Context(), limit)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось получить детекты"})
+	}
+	return c.JSON(items)
+}
+
+func (h Handler) listHwidBans(c fiber.Ctx) error {
+	items, err := h.service.ListHwidBans(c.Context())
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.JSON(items)
+}
+
+func (h Handler) listAccountBans(c fiber.Ctx) error {
+	items, err := h.service.ListAccountBans(c.Context())
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.JSON(items)
+}
+
+type banHwidRequest struct {
+	HwidHash string `json:"hwidHash"`
+	Reason   string `json:"reason"`
+}
+
+func (h Handler) banHwid(c fiber.Ctx) error {
+	user, _ := auth.CurrentUser(c)
+	var req banHwidRequest
+	if err := c.Bind().Body(&req); err != nil || req.HwidHash == "" {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Укажите hwidHash"})
+	}
+	if err := h.service.BanHwid(c.Context(), req.HwidHash, req.Reason, user.Login); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось забанить"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+type banAccountRequest struct {
+	UserUUID string `json:"userUuid"`
+	Login    string `json:"login"`
+	Reason   string `json:"reason"`
+}
+
+func (h Handler) banAccount(c fiber.Ctx) error {
+	admin, _ := auth.CurrentUser(c)
+	var req banAccountRequest
+	if err := c.Bind().Body(&req); err != nil || req.UserUUID == "" {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Укажите userUuid"})
+	}
+	if err := h.service.BanAccount(c.Context(), req.UserUUID, req.Login, req.Reason, admin.Login); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось забанить"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h Handler) unbanHwid(c fiber.Ctx) error {
+	if err := h.service.UnbanHwid(c.Context(), c.Params("hash")); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h Handler) unbanAccount(c fiber.Ctx) error {
+	if err := h.service.UnbanAccount(c.Context(), c.Params("uuid")); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h Handler) listSignatures(c fiber.Ctx) error {
+	items, err := h.service.ListSignatures(c.Context())
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.JSON(items)
+}
+
+func (h Handler) createSignature(c fiber.Ctx) error {
+	var sig models.CheatSignature
+	if err := c.Bind().Body(&sig); err != nil || sig.Kind == "" {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Укажите kind"})
+	}
+	created, err := h.service.CreateSignature(c.Context(), sig)
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось создать"})
+	}
+	return c.Status(http.StatusCreated).JSON(created)
+}
+
+func (h Handler) updateSignature(c fiber.Ctx) error {
+	var updates map[string]any
+	if err := c.Bind().Body(&updates); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(ErrorResponse{Message: "Некорректный запрос"})
+	}
+	delete(updates, "id")
+	delete(updates, "createdAt")
+	if err := h.service.UpdateSignature(c.Context(), c.Params("id"), normalizeSignatureUpdates(updates)); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Не удалось обновить"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+func (h Handler) deleteSignature(c fiber.Ctx) error {
+	if err := h.service.DeleteSignature(c.Context(), c.Params("id")); err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(ErrorResponse{Message: "Ошибка"})
+	}
+	return c.SendStatus(http.StatusNoContent)
+}
+
+// normalizeSignatureUpdates переводит JSON-ключи (camelCase) в имена колонок GORM.
+func normalizeSignatureUpdates(in map[string]any) map[string]any {
+	mapping := map[string]string{
+		"kind":     "kind",
+		"pattern":  "pattern",
+		"hashHex":  "hash_hex",
+		"severity": "severity",
+		"note":     "note",
+		"enabled":  "enabled",
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		if col, ok := mapping[k]; ok {
+			out[col] = v
+		}
+	}
+	return out
+}

@@ -1,0 +1,31 @@
+node_modules/
+dist/
+
+backend/data/
+backend/tmp/
+backend/storage/
+
+# Скомпилированные бинари бэкенда (собираются в Docker)
+backend/server
+backend/bot
+
+# Сборочные артефакты
+anticheat-native/build/
+dashboard/tsconfig.tsbuildinfo
+
+# Локальная dev-БД и стораджи
+data/
+
+src-tauri/target/
+launcher-slint/target/
+
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+
+.env
+backend/.env
+dashboard/.env.local
+
+# Прод-only оверрайд compose (живёт только на VPS, деплой его не трогает)
+docker-compose.override.yml

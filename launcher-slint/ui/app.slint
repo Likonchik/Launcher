@@ -1,0 +1,1617 @@
+import { LineEdit } from "std-widgets.slint";
+
+component GoldButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon-source;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 56px;
+    border-radius: 4px;
+    background: !enabled ? #43464b : (ta.pressed ? #c4c8ce : (ta.has-hover ? #f5f7f9 : #e4e7eb));
+    border-color: ta.has-hover && enabled ? #ffffff88 : #ffffff33;
+    border-width: 1px;
+    opacity: enabled ? 1.0 : 0.62;
+    animate background { duration: 160ms; easing: ease-out-quad; }
+    animate border-color { duration: 160ms; easing: ease-out-quad; }
+    animate opacity { duration: 160ms; easing: ease-out-quad; }
+    horizontal-stretch: 0;
+
+    drop-shadow-blur: enabled ? (ta.has-hover ? 24px : 16px) : 6px;
+    drop-shadow-color: enabled ? (ta.has-hover ? #9aa0a680 : #9aa0a660) : #00000000;
+    drop-shadow-offset-y: enabled ? (ta.has-hover ? 10px : 6px) : 2px;
+    animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+    animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 27px;
+                height: 27px;
+                border-radius: 14px;
+                background: #26292e;
+
+            Image {
+                source: root.icon-source;
+                image-fit: contain;
+                width: ta.pressed ? 16px : (ta.has-hover ? 21px : 18px);
+                height: self.width;
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                colorize: #f2f4f6;
+                animate width { duration: 340ms; easing: ease-out-back; }
+            }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: #1b1d20;
+                font-size: 18px;
+                font-weight: 900;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component DarkButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon-source;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 52px;
+    border-radius: 4px;
+    background: !enabled ? #111313 : (ta.pressed ? #1d211f : (ta.has-hover ? #151a18 : #070808));
+    opacity: enabled ? 1.0 : 0.58;
+    animate background { duration: 160ms; easing: ease-out-quad; }
+    animate opacity { duration: 160ms; easing: ease-out-quad; }
+    horizontal-stretch: 0;
+    border-color: ta.has-hover && enabled ? #9aa0a650 : #ffffff20;
+    border-width: 1px;
+    animate border-color { duration: 160ms; easing: ease-out-quad; }
+    drop-shadow-blur: ta.has-hover && enabled ? 14px : 8px;
+    drop-shadow-color: ta.has-hover && enabled ? #000000bb : #00000088;
+    drop-shadow-offset-y: ta.has-hover && enabled ? 7px : 4px;
+    animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+    animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 10px;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                Image {
+                    source: root.icon-source;
+                    image-fit: contain;
+                    width: ta.pressed ? 21px : (ta.has-hover ? 27px : 24px);
+                    height: self.width;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    animate width { duration: 340ms; easing: ease-out-back; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: #dde0e3;
+                font-size: 14px;
+                font-weight: 900;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component NavButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active;
+    in property <image> icon-source;
+    callback clicked();
+
+    height: 58px;
+    background: transparent;
+
+    width: row.preferred-width;
+
+    row := HorizontalLayout {
+        height: parent.height;
+        spacing: 9px;
+        alignment: center;
+
+        if root.icon-source.width > 0: VerticalLayout {
+            alignment: center;
+            Image {
+                source: root.icon-source;
+                image-fit: contain;
+                width: 24px;
+                height: 24px;
+                colorize: root.active ? white : (ta.has-hover ? #f0eee7 : #c6c0b4);
+                animate colorize { duration: 160ms; easing: ease-out-quad; }
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: root.active ? white : (ta.has-hover ? #f0eee7 : #c6c0b4);
+            animate color { duration: 160ms; easing: ease-out-quad; }
+            font-size: 20px;
+            font-weight: root.active ? 900 : 500;
+            vertical-alignment: center;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 3px;
+        width: root.active ? parent.width : 0px;
+        height: 3px;
+        background: #d8d6cf;
+        animate width { duration: 340ms; easing: ease-out-back; }
+    }
+
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+component PlayButton inherits Rectangle {
+    in property <string> label;
+    in property <image> icon-source;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    height: 64px;
+    border-radius: 4px;
+    background: !enabled ? #3a3d42 : (ta.pressed ? #c4c8ce : (ta.has-hover ? #f5f7f9 : #e4e7eb));
+    opacity: enabled ? 1.0 : 0.62;
+    animate background { duration: 160ms; easing: ease-out-quad; }
+    animate opacity { duration: 160ms; easing: ease-out-quad; }
+    border-color: ta.has-hover && enabled ? #ffffff66 : #ffffff33;
+    border-width: 1px;
+    animate border-color { duration: 160ms; easing: ease-out-quad; }
+
+    drop-shadow-blur: ta.has-hover ? 22px : 14px;
+    drop-shadow-color: enabled ? (ta.has-hover ? #c0c4c975 : #c0c4c945) : #00000000;
+    drop-shadow-offset-y: ta.has-hover ? 10px : 6px;
+    animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+    animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+
+    HorizontalLayout {
+        padding-left: 22px;
+        padding-right: 28px;
+        spacing: 16px;
+        alignment: center;
+
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 40px;
+                border-radius: 20px;
+                background: enabled ? #26292e : #ffffff1f;
+
+                Image {
+                    source: root.icon-source;
+                    image-fit: contain;
+                    width: ta.pressed ? 21px : (ta.has-hover ? 28px : 24px);
+                    height: self.width;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    colorize: enabled ? #f2f4f6 : #ffffff;
+                    animate width { duration: 340ms; easing: ease-out-back; }
+                }
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.label;
+                color: enabled ? #17181a : #ffffff;
+                font-size: 23px;
+                font-weight: 900;
+                letter-spacing: 0px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+component MiniButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: 58px;
+    height: 52px;
+    border-radius: 4px;
+    background: !enabled ? #111111 : (active ? #e4e7eb : (ta.pressed ? #242424 : (ta.has-hover ? #191919 : #080808)));
+    border-color: active ? #ffffffaa : #ffffff14;
+    border-width: 1px;
+    opacity: enabled ? 1.0 : 0.56;
+    animate background { duration: 160ms; easing: ease-out-quad; }
+    animate border-color { duration: 160ms; easing: ease-out-quad; }
+    animate opacity { duration: 160ms; easing: ease-out-quad; }
+
+    Text {
+        text: root.label;
+        color: active ? #1b1d20 : #e0e2e5;
+        font-size: 18px;
+        font-weight: 900;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+}
+
+struct NewsItem {
+    title: string,
+    date: string,
+    body: string,
+}
+
+component NewsCard inherits Rectangle {
+    in property <string> title;
+    in property <string> date;
+    in property <string> body;
+    in property <int> index;
+
+    // Каскадное появление: каждая карточка проявляется с задержкой по индексу.
+    property <bool> shown: false;
+    init => { shown = true; }
+
+    height: 116px;
+    border-radius: 6px;
+    background: ta.has-hover ? #10130feb : #0b0e0deb;
+    border-color: ta.has-hover ? #9aa0a655 : #ffffff1c;
+    border-width: 1px;
+    clip: true;
+    opacity: shown ? 1.0 : 0.0;
+    drop-shadow-blur: ta.has-hover ? 16px : 0px;
+    drop-shadow-color: #00000066;
+    drop-shadow-offset-y: ta.has-hover ? 6px : 0px;
+    animate background, border-color { duration: 220ms; easing: ease-out-quint; }
+    animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+    animate drop-shadow-offset-y { duration: 240ms; easing: ease-out-quint; }
+    animate opacity { duration: 380ms; delay: index * 70ms; easing: ease-out-quint; }
+
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: ta.has-hover ? 6px : 4px;
+        height: parent.height;
+        background: #9aa0a6;
+        animate width { duration: 200ms; easing: ease-out-quad; }
+    }
+
+    VerticalLayout {
+        x: 22px;
+        y: root.shown ? 16px : 30px;
+        width: parent.width - 44px;
+        height: parent.height - 32px;
+        spacing: 8px;
+        animate y { duration: 420ms; delay: root.index * 70ms; easing: ease-out-quint; }
+
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: root.title;
+                color: #eceef1;
+                font-size: 16px;
+                font-weight: 800;
+                overflow: elide;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Text {
+                text: root.date;
+                color: #989ca2;
+                font-size: 13px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.body;
+            color: #bbbec3;
+            font-size: 13px;
+            font-weight: 600;
+            wrap: word-wrap;
+            overflow: elide;
+        }
+    }
+
+    ta := TouchArea {}
+}
+
+export component AppWindow inherits Window {
+    title: "Project Minecraft Launcher";
+    preferred-width: 1200px;
+    preferred-height: 750px;
+    min-width: 900px;
+    min-height: 600px;
+    background: #070707;
+
+    property <float> startup-opacity: 0.0;
+    
+    init => {
+        startup-opacity = 1.0;
+    }
+
+    in property <string> api-url;
+    in property <string> message;
+    in property <string> user-login;
+    in property <string> user-uuid;
+    in property <string> token-expires-at;
+    in-out property <string> login-value;
+    in-out property <string> password-value;
+    in-out property <string> totp-value;
+    in property <bool> requires-totp;
+    in property <bool> is-loading;
+    in property <bool> is-authenticated;
+    in property <bool> is-slim;
+    in property <bool> is-syncing;
+    in property <bool> has-profile;
+    in property <bool> download-panel-visible;
+    in property <string> selected-profile-name;
+    in property <string> selected-profile-version;
+    in property <string> profile-status;
+    in property <string> download-phase;
+    in property <string> download-file;
+    in property <string> download-counter;
+    in property <float> download-progress;
+    in-out property <bool> settings-visible;
+    in property <int> memory-gb;
+    in property <bool> memory-auto;
+    in property <string> memory-label;
+    in property <string> install-folder;
+    in property <[NewsItem]> news-items;
+    in property <string> anticheat-alert;
+
+    callback login-requested(string, string, string);
+    callback anticheat-alert-dismiss();
+    callback logout-requested();
+    callback play-requested();
+    callback settings-requested();
+    callback settings-close-requested();
+    callback memory-auto-requested();
+    callback memory-decrease-requested();
+    callback memory-increase-requested();
+    callback open-install-folder-requested();
+    callback open-url(string);
+
+    Rectangle {
+        width: parent.width;
+        height: parent.height;
+        opacity: startup-opacity;
+        animate opacity { duration: 600ms; easing: ease-out-quint; }
+
+        Image {
+            source: @image-url("../assets/background.jpg");
+            image-fit: cover;
+            width: parent.width;
+            height: parent.height;
+        }
+
+        Rectangle {
+            background: #000000b8;
+        }
+
+	    Rectangle {
+	        width: 474px;
+	        height: 484px;
+	        x: (parent.width - 474px) / 2;
+	        y: (parent.height - 484px) / 2 + (root.is-loading ? -8px : 0px);
+	        visible: !root.is-authenticated;
+	        border-radius: 22px;
+	        background: root.is-loading ? #050403 : #000000;
+            border-color: root.is-loading ? #9aa0a636 : #ffffff0f;
+            border-width: 1px;
+            drop-shadow-blur: root.is-loading ? 42px : 30px;
+            drop-shadow-color: root.is-loading ? #9aa0a63f : #00000088;
+            drop-shadow-offset-y: root.is-loading ? 16px : 10px;
+            opacity: !root.is-authenticated ? 1.0 : 0.0;
+            animate y { duration: 420ms; easing: ease-in-out-quint; }
+            animate background, border-color { duration: 300ms; easing: ease-out-quint; }
+            animate drop-shadow-blur { duration: 320ms; easing: ease-out-quint; }
+            animate drop-shadow-offset-y { duration: 320ms; easing: ease-out-quint; }
+            animate opacity { duration: 420ms; easing: ease-in-out-quint; }
+
+        HorizontalLayout {
+            x: 40px;
+            y: 38px;
+            width: parent.width - 80px;
+            height: 48px;
+            spacing: 18px;
+
+            VerticalLayout {
+                alignment: center;
+                Image {
+                    source: @image-url("../assets/game.svg");
+                    image-fit: contain;
+                    width: 32px;
+                    height: 32px;
+                }
+            }
+
+            Text {
+                text: "PROJECT MINECRAFT";
+                color: #e0e2e5;
+                font-size: 29px;
+                font-weight: 900;
+                vertical-alignment: center;
+            }
+        }
+
+        Rectangle {
+            x: 38px;
+            y: 124px;
+            width: parent.width - 76px;
+            height: 1px;
+            background: #242424;
+        }
+
+        Text {
+            text: "Логин";
+            x: 40px;
+            y: 158px;
+            color: #b4b7bc;
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        login-input := LineEdit {
+            x: 40px;
+            y: 188px;
+            width: parent.width - 80px;
+            height: 66px;
+	            font-size: 20px;
+	            enabled: !root.is-loading && !root.is-authenticated;
+            text <=> root.login-value;
+            placeholder-text: "";
+        }
+
+        Text {
+            text: "Пароль";
+            x: 40px;
+            y: 278px;
+            color: #b4b7bc;
+            font-size: 18px;
+            font-weight: 900;
+        }
+
+        password-input := LineEdit {
+            x: 40px;
+            y: 308px;
+            width: parent.width - 80px;
+            height: 66px;
+	            font-size: 20px;
+	            enabled: !root.is-loading && !root.is-authenticated;
+            text <=> root.password-value;
+            input-type: password;
+            placeholder-text: "";
+            accepted(_) => {
+                root.login-requested(root.login-value, root.password-value, root.totp-value);
+            }
+        }
+
+        totp-input := LineEdit {
+            x: 40px;
+            y: 0px;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            enabled: false;
+            text <=> root.totp-value;
+        }
+
+        if root.message != "" && !root.requires-totp: Text {
+            text: root.message;
+            x: 40px;
+            y: 454px;
+            width: parent.width - 80px;
+            color: #ff6b6b;
+            font-size: 13px;
+            font-weight: 700;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+
+        GoldButton {
+            x: 112px;
+            y: 392px;
+            width: 254px;
+            height: 56px;
+	            label: root.is-loading ? "ПРОВЕРКА..." : "АВТОРИЗОВАТЬСЯ";
+	            icon-source: @image-url("../assets/login.svg");
+	            enabled: !root.is-loading && !root.is-authenticated;
+            clicked => {
+                root.login-requested(root.login-value, root.password-value, root.totp-value);
+            }
+        }
+    }
+
+	    Rectangle {
+	        width: parent.width;
+	        height: parent.height;
+	        y: root.is-authenticated ? 0px : 18px;
+	        visible: root.is-authenticated;
+	        background: transparent;
+	        opacity: root.is-authenticated ? 1.0 : 0.0;
+            animate y { duration: 480ms; delay: 80ms; easing: ease-out-quint; }
+            animate opacity { duration: 480ms; delay: 80ms; easing: ease-in-out-quint; }
+
+        Rectangle {
+            x: 232px;
+            y: 104px;
+            width: parent.width - 232px;
+            height: parent.height - 104px;
+            background: #00000040;
+            opacity: root.is-authenticated ? 1.0 : 0.0;
+            animate opacity { duration: 480ms; delay: 80ms; easing: ease-in-out-quint; }
+        }
+
+        // Лента новостей проекта в центре главного экрана
+        Rectangle {
+            x: 264px;
+            y: root.is-authenticated ? 130px : 146px;
+            width: parent.width - 296px;
+            height: parent.height - 356px;
+            background: transparent;
+            opacity: root.is-authenticated ? 1.0 : 0.0;
+            animate y { duration: 520ms; delay: 60ms; easing: ease-out-quint; }
+            animate opacity { duration: 520ms; delay: 60ms; easing: ease-in-out-quint; }
+
+            Image {
+                source: @image-url("../assets/news.svg");
+                image-fit: contain;
+                x: 2px;
+                y: -2px;
+                width: 20px;
+                height: 20px;
+                colorize: #989ca2;
+            }
+
+            Text {
+                text: "НОВОСТИ ПРОЕКТА";
+                x: 29px;
+                y: 0px;
+                color: #989ca2;
+                font-size: 15px;
+                font-weight: 900;
+                letter-spacing: 1px;
+            }
+
+            Rectangle {
+                x: 0px;
+                y: 32px;
+                width: parent.width;
+                height: parent.height - 32px;
+
+                if root.news-items.length == 0: Text {
+                    width: parent.width;
+                    height: parent.height;
+                    text: "Новостей пока нет";
+                    color: #6f675c;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                Flickable {
+                    width: parent.width;
+                    height: parent.height;
+                    viewport-width: self.width;
+
+                    VerticalLayout {
+                        width: parent.width;
+                        spacing: 12px;
+                        padding-bottom: 8px;
+
+                        for item[idx] in root.news-items: NewsCard {
+                            title: item.title;
+                            date: item.date;
+                            body: item.body;
+                            index: idx;
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            x: 232px;
+            y: 0px;
+            width: parent.width - 232px;
+            height: 104px;
+            background: #090b0bee;
+        }
+
+        Rectangle {
+            x: 232px;
+            y: 103px;
+            width: parent.width - 232px;
+            height: 1px;
+            background: #ffffff22;
+        }
+
+        Rectangle {
+            x: root.is-authenticated ? 0px : -24px;
+            y: 0px;
+            width: 232px;
+            height: parent.height;
+            background: #101514f2;
+            border-color: #ffffff14;
+            border-width: 1px;
+            clip: true;
+            animate x { duration: 480ms; easing: ease-out-quint; }
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width;
+                height: 106px;
+                background: #090c0cee;
+            }
+
+            Image {
+                source: @image-url("../assets/logo.svg");
+                image-fit: contain;
+                x: 34px;
+                y: 32px;
+                width: 132px;
+                height: 48px;
+            }
+
+            Rectangle {
+                x: 30px;
+                y: 106px;
+                width: parent.width - 60px;
+                height: 1px;
+                background: #ffffff22;
+            }
+
+            Rectangle {
+                x: 0px;
+                y: 122px;
+                width: parent.width;
+                height: 78px;
+                background: #18201ee8;
+
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: 3px;
+                    height: parent.height;
+                    background: #c4cfc4;
+                }
+
+                Rectangle {
+                    x: 32px;
+                    y: 15px;
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 4px;
+                    background: #d8d8c5;
+
+                    Image {
+                        source: @image-url("../assets/game.svg");
+                        image-fit: contain;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: 26px;
+                        height: 26px;
+                        colorize: #202826;
+                    }
+                }
+
+                Text {
+                    text: root.has-profile ? root.selected-profile-name : "Нет профиля";
+                    x: 92px;
+                    y: 0px;
+                    width: parent.width - 100px;
+                    height: parent.height;
+                    color: #eceef1;
+                    font-size: 14px;
+                    font-weight: 800;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+
+            DarkButton {
+                x: 24px;
+                y: parent.height - self.height - 32px;
+                width: 184px;
+                height: 46px;
+                label: "Список модов";
+                icon-source: @image-url("../assets/mods.svg");
+            }
+        }
+
+        HorizontalLayout {
+            x: 260px;
+            y: root.is-authenticated ? 22px : 8px;
+            height: 58px;
+            spacing: 24px;
+            opacity: root.is-authenticated ? 1.0 : 0.0;
+            animate y { duration: 480ms; delay: 80ms; easing: ease-out-quint; }
+            animate opacity { duration: 480ms; delay: 80ms; easing: ease-in-out-quint; }
+
+            NavButton { label: "ИГРА"; active: true; icon-source: @image-url("../assets/game.svg"); }
+            NavButton { label: "НОВОСТИ"; active: false; icon-source: @image-url("../assets/news.svg"); }
+            NavButton { label: "ПОДДЕРЖКА"; active: false; icon-source: @image-url("../assets/support.svg"); }
+        }
+
+        HorizontalLayout {
+            x: parent.width - 132px;
+            y: 30px;
+            width: 104px;
+            height: 46px;
+            spacing: 12px;
+
+            Rectangle {
+                width: 46px;
+                height: 46px;
+                border-radius: 4px;
+                background: ta-person.pressed ? #202423 : (ta-person.has-hover ? #171d1b : #050606);
+                animate background { duration: 160ms; easing: ease-out-quad; }
+                border-color: ta-person.has-hover ? #9aa0a650 : #ffffff20;
+                border-width: 1px;
+                drop-shadow-blur: ta-person.has-hover ? 14px : 0px;
+                drop-shadow-color: #00000088;
+                drop-shadow-offset-y: ta-person.has-hover ? 6px : 0px;
+                animate border-color { duration: 160ms; easing: ease-out-quad; }
+                animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+                animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+                Image {
+                    source: @image-url("../assets/person.svg");
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 24px;
+                    height: 24px;
+                    colorize: #e8e4dc;
+                }
+                ta-person := TouchArea {}
+            }
+
+            Rectangle {
+                width: 46px;
+                height: 46px;
+                border-radius: 4px;
+                background: ta-logout.pressed ? #331111 : (ta-logout.has-hover ? #220b0b : #050606);
+                animate background { duration: 160ms; easing: ease-out-quad; }
+                border-color: ta-logout.has-hover ? #ff4d4d40 : #ffffff20;
+                border-width: 1px;
+                drop-shadow-blur: ta-logout.has-hover ? 14px : 0px;
+                drop-shadow-color: #00000088;
+                drop-shadow-offset-y: ta-logout.has-hover ? 6px : 0px;
+                animate border-color { duration: 160ms; easing: ease-out-quad; }
+                animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+                animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+                Image {
+                    source: @image-url("../assets/logout.svg");
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 24px;
+                    height: 24px;
+                    colorize: #ff4d4d;
+                }
+                ta-logout := TouchArea { clicked => { root.logout-requested(); } }
+            }
+        }
+
+        HorizontalLayout {
+            x: 260px;
+            y: parent.height - self.height - 32px;
+            spacing: 12px;
+            height: 52px;
+
+            Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 4px;
+                background: ta-discord.pressed ? #202423 : (ta-discord.has-hover ? #171d1b : #050606);
+                animate background { duration: 160ms; easing: ease-out-quad; }
+                border-color: ta-discord.has-hover ? #9aa0a650 : #ffffff20;
+                border-width: 1px;
+                drop-shadow-blur: ta-discord.has-hover ? 14px : 0px;
+                drop-shadow-color: #00000088;
+                drop-shadow-offset-y: ta-discord.has-hover ? 6px : 0px;
+                animate border-color { duration: 160ms; easing: ease-out-quad; }
+                animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+                animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+                Image {
+                    source: @image-url("../assets/discord.svg");
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 26px;
+                    height: 26px;
+                    colorize: white;
+                }
+                ta-discord := TouchArea {
+                    clicked => { root.open-url("https://discord.gg/zmeJMqH7j8"); }
+                }
+            }
+
+            Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 4px;
+                background: ta-telegram.pressed ? #202423 : (ta-telegram.has-hover ? #171d1b : #050606);
+                animate background { duration: 160ms; easing: ease-out-quad; }
+                border-color: ta-telegram.has-hover ? #9aa0a650 : #ffffff20;
+                border-width: 1px;
+                drop-shadow-blur: ta-telegram.has-hover ? 14px : 0px;
+                drop-shadow-color: #00000088;
+                drop-shadow-offset-y: ta-telegram.has-hover ? 6px : 0px;
+                animate border-color { duration: 160ms; easing: ease-out-quad; }
+                animate drop-shadow-blur { duration: 240ms; easing: ease-out-quint; }
+                animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-back; }
+                Image {
+                    source: @image-url("../assets/telegram.svg");
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 26px;
+                    height: 26px;
+                    colorize: white;
+                }
+                ta-telegram := TouchArea {
+                    clicked => { root.open-url("https://t.me/project_minecraft"); }
+                }
+            }
+        }
+
+        play-card := Rectangle {
+            property <bool> dl-done: root.download-progress >= 1.0;
+            // пульс активности: мигает, пока идёт загрузка (как «проверка файлов»)
+            property <bool> dl-pulse: false;
+
+            Timer {
+                interval: 850ms;
+                running: root.is-syncing && !play-card.dl-done;
+                triggered => { play-card.dl-pulse = !play-card.dl-pulse; }
+            }
+
+            x: parent.width - self.width - 32px;
+            y: parent.height - self.height - 32px + (root.is-syncing ? -2px : 0px);
+            // при загрузке подложка расширяется влево, освобождая место под иконку
+            width: root.is-syncing ? 660px : 552px;
+            height: 178px;
+            border-radius: 4px;
+            background: #080a0aeb;
+            border-color: root.is-syncing ? #9aa0a655 : #ffffff22;
+            border-width: 1px;
+            drop-shadow-blur: root.is-syncing ? 34px : 24px;
+            drop-shadow-color: root.is-syncing ? #9aa0a62f : #00000099;
+            drop-shadow-offset-y: root.is-syncing ? 12px : 8px;
+            clip: true;
+            animate width { duration: 460ms; easing: ease-out-quint; }
+            animate y { duration: 300ms; easing: ease-out-quint; }
+            animate border-color { duration: 300ms; easing: ease-out-quint; }
+            animate drop-shadow-blur { duration: 300ms; easing: ease-out-quint; }
+            animate drop-shadow-offset-y { duration: 300ms; easing: ease-out-quint; }
+
+            // ── левая область с иконкой скачивания (раскрывается при загрузке) ──
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: parent.width - 552px;
+                height: parent.height;
+                clip: true;
+
+                // вертикальный разделитель справа от иконки
+                Rectangle {
+                    x: parent.width - 1px;
+                    width: 1px;
+                    height: parent.height - 48px;
+                    y: 24px;
+                    background: #ffffff12;
+                    opacity: root.is-syncing ? 1.0 : 0.0;
+                    animate opacity { duration: 360ms; easing: ease-out-quint; }
+                }
+
+                // плитка иконки
+                Rectangle {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 68px;
+                    height: 68px;
+                    border-radius: 18px;
+                    background: play-card.dl-done ? #1f2937 : #14181c;
+                    border-width: 1px;
+                    border-color: play-card.dl-done ? #ffffff44 : #ffffff14;
+                    opacity: root.is-syncing ? 1.0 : 0.0;
+                    animate background, border-color { duration: 480ms; easing: ease-out-quint; }
+                    animate opacity { duration: 320ms; easing: ease-out-quint; }
+
+                    // волна свечения — кольцо бьёт наружу при завершении
+                    Rectangle {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        width: play-card.dl-done ? 124px : 48px;
+                        height: self.width;
+                        border-radius: self.width / 2;
+                        background: transparent;
+                        border-width: 2px;
+                        border-color: #ffffff;
+                        opacity: play-card.dl-done ? 0.0 : 0.16;
+                        animate width, opacity { duration: 680ms; easing: ease-out-quint; }
+                    }
+
+                    // иконка загрузки (гаснет при завершении)
+                    Image {
+                        source: @image-url("../assets/download.svg");
+                        image-fit: contain;
+                        width: 30px;
+                        height: 30px;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        colorize: #cdd1d7;
+                        opacity: play-card.dl-done ? 0.0 : 1.0;
+                        animate opacity { duration: 260ms; easing: ease-out-quad; }
+                    }
+
+                    // галочка готовности (упруго выскакивает)
+                    Image {
+                        source: @image-url("../assets/download_done.svg");
+                        image-fit: contain;
+                        width: play-card.dl-done ? 38px : 20px;
+                        height: self.width;
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        colorize: #ffffff;
+                        opacity: play-card.dl-done ? 1.0 : 0.0;
+                        animate width { duration: 520ms; easing: ease-out-back; }
+                        animate opacity { duration: 320ms; easing: ease-out-quad; }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                x: parent.width - 552px;
+                width: 552px;
+                height: parent.height;
+                padding-left: 28px;
+                padding-right: 28px;
+                alignment: space-between;
+
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 16px;
+
+                    DarkButton {
+                        width: 188px;
+                        height: 48px;
+                        label: "НАСТРОЙКИ";
+                        icon-source: @image-url("../assets/settings.svg");
+                        clicked => { root.settings-requested(); }
+                    }
+
+                    VerticalLayout {
+                        spacing: 9px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text { width: 64px; text: "Версия:"; color: #989ca2; font-size: 14px; font-weight: 800; }
+                            Text { text: root.selected-profile-version; color: #d7dadf; font-size: 14px; font-weight: 800; overflow: elide; }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text { width: 64px; text: "Статус:"; color: #989ca2; font-size: 14px; font-weight: 800; }
+                            Text {
+                                text: root.is-syncing ? root.download-phase : root.profile-status;
+                                color: root.is-syncing
+                                    ? (play-card.dl-done ? #ffffff : (play-card.dl-pulse ? #ffffff : #8a8f96))
+                                    : #d7dadf;
+                                font-size: 14px;
+                                font-weight: 800;
+                                overflow: elide;
+                                animate color { duration: 850ms; easing: ease-in-out-sine; }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text { width: 64px; text: root.is-syncing ? "Прогресс:" : "Сервер:"; color: #989ca2; font-size: 14px; font-weight: 800; }
+                            Text {
+                                text: root.is-syncing
+                                    ? "\{round(root.download-progress * 100)}% • " + root.download-counter
+                                    : (root.has-profile ? "Готов" : "Отключен");
+                                color: root.is-syncing
+                                    ? (play-card.dl-done ? #ffffff : (play-card.dl-pulse ? #eceef1 : #9398a0))
+                                    : #d7dadf;
+                                font-size: 14px;
+                                font-weight: 800;
+                                overflow: elide;
+                                animate color { duration: 850ms; easing: ease-in-out-sine; }
+                            }
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    alignment: center;
+                    PlayButton {
+                        width: 258px;
+                        height: 76px;
+                        label: root.is-syncing ? "ЗАГРУЗКА..." : "ИГРАТЬ";
+                        icon-source: @image-url("../assets/play.svg");
+                        enabled: root.has-profile && !root.is-syncing;
+                        clicked => { root.play-requested(); }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: 1px;
+                y: parent.height - self.height - 1px;
+                width: parent.width - 2px;
+                height: 4px;
+                background: #15181800;
+                clip: true;
+                opacity: root.is-syncing ? 1.0 : 0.0;
+                animate opacity { duration: 320ms; easing: ease-in-out-quint; }
+
+                Rectangle {
+                    x: 0;
+                    width: parent.width * root.download-progress;
+                    height: parent.height;
+                    background: #9aa0a6;
+                    animate width { duration: 320ms; easing: ease-out-quint; }
+                }
+            }
+        }
+    }
+
+    settings-layer := Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #000000aa;
+        opacity: root.settings-visible && root.is-authenticated ? 1.0 : 0.0;
+        animate opacity { duration: 300ms; easing: ease-in-out-quint; }
+
+        settings-backdrop := TouchArea {
+            enabled: root.settings-visible && root.is-authenticated;
+            clicked => { root.settings-close-requested(); }
+        }
+
+        settings-card := Rectangle {
+            width: 560px;
+            height: 470px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2 + (root.settings-visible ? 0px : 28px);
+            border-radius: 20px;
+            background: #0c0c0cfb;
+            border-color: root.settings-visible ? #ffffff24 : #ffffff00;
+            border-width: 1px;
+            opacity: root.settings-visible && root.is-authenticated ? 1.0 : 0.0;
+            animate y { duration: 380ms; easing: ease-out-quint; }
+            animate opacity { duration: 300ms; easing: ease-in-out-quint; }
+            animate border-color { duration: 300ms; easing: ease-out-quint; }
+            drop-shadow-blur: root.settings-visible ? 38px : 10px;
+            drop-shadow-color: root.settings-visible ? #000000aa : #00000000;
+            drop-shadow-offset-y: root.settings-visible ? 14px : 4px;
+            animate drop-shadow-blur { duration: 360ms; easing: ease-out-quint; }
+            animate drop-shadow-offset-y { duration: 360ms; easing: ease-out-quint; }
+
+            settings-card-blocker := TouchArea {
+                enabled: root.settings-visible && root.is-authenticated;
+            }
+
+            Rectangle {
+                x: 28px;
+                y: 28px;
+                width: 50px;
+                height: 50px;
+                border-radius: 13px;
+                background: @linear-gradient(135deg, #d4d7db 0%, #868a8f 100%);
+                drop-shadow-blur: 16px;
+                drop-shadow-color: #9aa0a644;
+                drop-shadow-offset-y: 5px;
+
+                Image {
+                    source: @image-url("../assets/settings.svg");
+                    image-fit: contain;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    width: 26px;
+                    height: 26px;
+                    colorize: #17181a;
+                }
+            }
+
+            Text {
+                text: "Настройки";
+                x: 92px;
+                y: 30px;
+                width: parent.width - 170px;
+                height: 30px;
+                color: #e9ebee;
+                font-size: 26px;
+                font-weight: 900;
+                overflow: elide;
+            }
+
+            Text {
+                text: "Project Minecraft";
+                x: 92px;
+                y: 60px;
+                width: parent.width - 170px;
+                height: 20px;
+                color: #8c8f95;
+                font-size: 13px;
+                font-weight: 800;
+                letter-spacing: 0.4px;
+                overflow: elide;
+            }
+
+            Rectangle {
+                x: parent.width - 64px;
+                y: 30px;
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+                background: close-settings.pressed ? #3a1414 : (close-settings.has-hover ? #241010 : #111111);
+                border-color: close-settings.has-hover ? #ff5a5a55 : #ffffff18;
+                border-width: 1px;
+	                animate background, border-color { duration: 160ms; easing: ease-out-quad; }
+
+                Text {
+                    text: "✕";
+                    color: close-settings.has-hover ? #ff8a8a : #c5c8cd;
+                    font-size: 16px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+	                    animate color { duration: 160ms; easing: ease-out-quad; }
+                }
+
+                close-settings := TouchArea {
+                    enabled: root.settings-visible && root.is-authenticated;
+                    clicked => { root.settings-close-requested(); }
+                }
+            }
+
+            Rectangle {
+                x: 28px;
+                y: 96px;
+                width: parent.width - 56px;
+                height: 1px;
+                background: #ffffff14;
+            }
+
+            Rectangle {
+                x: 28px;
+                y: 112px;
+                width: parent.width - 56px;
+                height: 158px;
+                border-radius: 14px;
+                background: #131313;
+                border-color: #ffffff12;
+                border-width: 1px;
+
+                Text {
+                    text: "Оперативная память";
+                    x: 22px;
+                    y: 20px;
+                    width: parent.width - 160px;
+                    height: 24px;
+                    color: #e0e2e5;
+                    font-size: 18px;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+
+                Rectangle {
+                    x: parent.width - 118px;
+                    y: 18px;
+                    width: 96px;
+                    height: 26px;
+                    border-radius: 13px;
+                    background: root.memory-auto ? #9aa0a622 : #ffffff10;
+                    border-color: root.memory-auto ? #9aa0a655 : #ffffff14;
+                    border-width: 1px;
+	                    animate background, border-color { duration: 220ms; easing: ease-out-quint; }
+
+                    Text {
+                        text: root.memory-auto ? "АВТО" : "ВРУЧНУЮ";
+                        color: root.memory-auto ? #eceef1 : #989ca2;
+                        font-size: 11px;
+                        font-weight: 900;
+                        letter-spacing: 0.6px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Rectangle {
+                    x: 22px;
+                    y: 58px;
+                    width: parent.width - 44px;
+                    height: 6px;
+                    border-radius: 3px;
+                    background: #050505;
+                    border-color: #ffffff0e;
+                    border-width: 1px;
+
+                    Rectangle {
+                        x: 0px;
+                        width: max(8px, (parent.width * root.memory-gb) / 64);
+                        height: parent.height;
+                        border-radius: 3px;
+                        background: @linear-gradient(90deg, #868a8f 0%, #d4d7db 100%);
+	                        animate width { duration: 320ms; easing: ease-out-quint; }
+                    }
+                }
+
+                HorizontalLayout {
+                    x: 22px;
+                    y: 84px;
+                    width: parent.width - 44px;
+                    height: 52px;
+                    spacing: 10px;
+
+                    MiniButton {
+                        label: "−";
+                        enabled: root.settings-visible && root.is-authenticated && root.memory-gb > 2;
+                        clicked => { root.memory-decrease-requested(); }
+                    }
+
+                    Rectangle {
+                        width: 132px;
+                        height: 52px;
+                        border-radius: 10px;
+                        background: #050505;
+                        border-color: #ffffff14;
+                        border-width: 1px;
+
+                        Text {
+                            text: root.memory-label;
+                            color: #eaecef;
+                            font-size: 18px;
+                            font-weight: 900;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+
+                    MiniButton {
+                        label: "+";
+                        enabled: root.settings-visible && root.is-authenticated && root.memory-gb < 64;
+                        clicked => { root.memory-increase-requested(); }
+                    }
+
+                    Rectangle { background: transparent; horizontal-stretch: 1; }
+
+                    MiniButton {
+                        width: 104px;
+                        label: "AUTO";
+                        active: root.memory-auto;
+                        enabled: root.settings-visible && root.is-authenticated;
+                        clicked => { root.memory-auto-requested(); }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: 28px;
+                y: 288px;
+                width: parent.width - 56px;
+                height: 150px;
+                border-radius: 14px;
+                background: #131313;
+                border-color: #ffffff12;
+                border-width: 1px;
+
+                Text {
+                    text: "Папка установки";
+                    x: 22px;
+                    y: 20px;
+                    width: parent.width - 44px;
+                    height: 24px;
+                    color: #e0e2e5;
+                    font-size: 18px;
+                    font-weight: 800;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: "Где хранятся файлы игры и сборки";
+                    x: 22px;
+                    y: 46px;
+                    width: parent.width - 44px;
+                    height: 18px;
+                    color: #8c7e6e;
+                    font-size: 12px;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+
+                HorizontalLayout {
+                    x: 22px;
+                    y: 80px;
+                    width: parent.width - 44px;
+                    height: 48px;
+                    spacing: 10px;
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        border-radius: 10px;
+                        background: #050505;
+                        border-color: #ffffff14;
+                        border-width: 1px;
+
+                        HorizontalLayout {
+                            x: 14px;
+                            width: parent.width - 28px;
+                            height: parent.height;
+                            spacing: 10px;
+
+                            VerticalLayout {
+                                alignment: center;
+                                Image {
+                                    source: @image-url("../assets/folder.svg");
+                                    image-fit: contain;
+                                    width: 18px;
+                                    height: 18px;
+                                    colorize: #989ca2;
+                                }
+                            }
+
+                            Text {
+                                text: root.install-folder;
+                                color: #bbbec3;
+                                font-size: 13px;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    DarkButton {
+                        width: 180px;
+                        height: 48px;
+                        label: "Открыть папку";
+                        icon-source: @image-url("../assets/folder.svg");
+                        enabled: root.settings-visible && root.is-authenticated;
+                        clicked => { root.open-install-folder-requested(); }
+                    }
+                }
+            }
+        }
+    }
+
+    totp-layer := Rectangle {
+        background: #00000099;
+        opacity: root.requires-totp && !root.is-authenticated ? 1.0 : 0.0;
+        animate opacity { duration: 300ms; easing: ease-in-out-quint; }
+
+        Rectangle {
+            width: 438px;
+            height: 392px;
+            x: (parent.width - 438px) / 2;
+            y: 188px + (root.requires-totp && !root.is-authenticated ? 0px : 18px);
+            border-radius: 22px;
+            border-color: root.requires-totp && !root.is-authenticated ? #2f2720 : #22222200;
+            border-width: 1px;
+            background: #000000;
+            drop-shadow-blur: root.requires-totp && !root.is-authenticated ? 34px : 8px;
+            drop-shadow-color: root.requires-totp && !root.is-authenticated ? #000000aa : #00000000;
+            drop-shadow-offset-y: root.requires-totp && !root.is-authenticated ? 14px : 4px;
+            animate y { duration: 420ms; easing: ease-in-out-quint; }
+            animate border-color { duration: 300ms; easing: ease-out-quint; }
+            animate drop-shadow-blur { duration: 320ms; easing: ease-out-quint; }
+            animate drop-shadow-offset-y { duration: 320ms; easing: ease-out-quint; }
+
+            Text {
+                text: "2FA аутентификация";
+                x: 44px;
+                y: 72px;
+                width: parent.width - 88px;
+                color: #e0e2e5;
+                font-size: 26px;
+                font-weight: 900;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "Пожалуйста, введите код\nподтверждения из вашего\nприложения аутентификации";
+                x: 54px;
+                y: 112px;
+                width: parent.width - 108px;
+                color: #b4b7bc;
+                font-size: 20px;
+                font-weight: 800;
+                horizontal-alignment: center;
+            }
+
+            if root.message != "": Text {
+                text: root.message;
+                x: 40px;
+                y: 194px;
+                width: parent.width - 80px;
+                color: #ff6b6b;
+                font-size: 13px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            modal-totp-input := LineEdit {
+                x: 40px;
+                y: 226px;
+                width: parent.width - 80px;
+                height: 66px;
+                font-size: 20px;
+                enabled: root.requires-totp && !root.is-authenticated && !root.is-loading;
+                text <=> root.totp-value;
+                placeholder-text: "";
+                accepted(_) => {
+                    root.login-requested(root.login-value, root.password-value, root.totp-value);
+                }
+            }
+
+            DarkButton {
+                x: 118px;
+                y: 318px;
+                width: 220px;
+                height: 56px;
+                label: root.is-loading ? "Проверка..." : "Подтвердить";
+                icon-source: @image-url("../assets/key.svg");
+                enabled: root.requires-totp && !root.is-authenticated && !root.is-loading && root.totp-value != "";
+                clicked => {
+                    root.login-requested(root.login-value, root.password-value, root.totp-value);
+                }
+            }
+        }
+    }
+    }
+
+    // Полноэкранное уведомление античита (поверх всего интерфейса).
+    if root.anticheat-alert != "": Rectangle {
+        width: parent.width;
+        height: parent.height;
+        background: #08080fee;
+
+        // Перехватываем все клики, чтобы интерфейс под оверлеем был недоступен.
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+        }
+
+        Rectangle {
+            width: min(parent.width - 80px, 540px);
+            height: 380px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: #14141c;
+            border-radius: 22px;
+            border-width: 1px;
+            border-color: #ff5a5a55;
+            drop-shadow-blur: 48px;
+            drop-shadow-color: #000000b0;
+
+            VerticalLayout {
+                padding: 38px;
+                spacing: 20px;
+                alignment: center;
+
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 92px;
+                        height: 92px;
+                        border-radius: 46px;
+                        background: #ff5a5a1f;
+                        border-width: 2px;
+                        border-color: #ff5a5a;
+                        Text {
+                            text: "!";
+                            font-size: 54px;
+                            font-weight: 900;
+                            color: #ff5a5a;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
+                }
+
+                Text {
+                    text: "Запуск заблокирован защитой";
+                    font-size: 24px;
+                    font-weight: 800;
+                    color: #ffffff;
+                    horizontal-alignment: center;
+                }
+
+                Text {
+                    text: root.anticheat-alert;
+                    font-size: 15px;
+                    color: #c8c8d4;
+                    wrap: word-wrap;
+                    horizontal-alignment: center;
+                }
+
+                HorizontalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 220px;
+                        height: 52px;
+                        border-radius: 13px;
+                        background: dismiss-area.has-hover ? #ff6a6a : #e24c4c;
+                        animate background { duration: 160ms; easing: ease-out-quad; }
+                        dismiss-area := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.anticheat-alert-dismiss();
+                            }
+                        }
+                        Text {
+                            text: "Понятно";
+                            color: #ffffff;
+                            font-size: 16px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
