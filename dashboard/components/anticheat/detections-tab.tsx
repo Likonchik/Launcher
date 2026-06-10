@@ -31,6 +31,7 @@ export function DetectionsTab({
   const toast = useToast();
   const confirm = useConfirm();
   const [banningId, setBanningId] = useState<string | null>(null);
+  const [hwidBanningId, setHwidBanningId] = useState<string | null>(null);
 
   const stats = {
     total: detections.length,
@@ -58,6 +59,30 @@ export function DetectionsTab({
       toast('error', errorMessage(e));
     } finally {
       setBanningId(null);
+    }
+  }
+
+  async function banHwid(d: Detection) {
+    if (!d.hwidHash) return;
+    const ok = await confirm({
+      title: 'HWID-бан',
+      message: `Забанить устройство ${d.hwidHash.slice(0, 16)}… игрока ${d.login || d.userUuid} по детекту «${d.signature}»?`,
+      confirmLabel: 'Забанить',
+      danger: true
+    });
+    if (!ok) return;
+    setHwidBanningId(d.id);
+    try {
+      await api('/api/admin/anticheat/bans/hwid', {
+        method: 'POST',
+        body: { hwidHash: d.hwidHash, reason: `manual: ${d.signature}` }
+      });
+      toast('success', 'HWID-бан выдан');
+      await onReload();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setHwidBanningId(null);
     }
   }
 
@@ -104,14 +129,26 @@ export function DetectionsTab({
                 </Td>
                 <Td className="whitespace-nowrap text-fg-muted">{new Date(d.createdAt).toLocaleString('ru-RU')}</Td>
                 <Td className="text-right">
-                  <Button
-                    variant="danger"
-                    className="h-8 px-3"
-                    loading={banningId === d.id}
-                    onClick={() => void banAccount(d)}
-                  >
-                    Забанить
-                  </Button>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="danger"
+                      className="h-8 px-3"
+                      loading={banningId === d.id}
+                      onClick={() => void banAccount(d)}
+                    >
+                      Забанить
+                    </Button>
+                    {d.hwidHash && (
+                      <Button
+                        variant="ghost"
+                        className="h-8 px-3"
+                        loading={hwidBanningId === d.id}
+                        onClick={() => void banHwid(d)}
+                      >
+                        HWID-бан
+                      </Button>
+                    )}
+                  </div>
                 </Td>
               </tr>
             ))}

@@ -76,7 +76,7 @@ func main() {
 		slog.Info("auth provider", "mode", "local")
 	}
 
-	authService := auth.NewService(db, provider, cfg.JWTSecret, cfg.AdminLogins, cfg.AppEnv)
+	authService := auth.NewService(db, provider, cfg.JWTSecret, cfg.AdminLogins, cfg.AppEnv, cfg.TokenTTL)
 	auth.NewHandler(authService).RegisterRoutes(app)
 	adminapi.NewHandler(db).RegisterRoutes(app, authService.RequireAuth())
 	profilesBroker := events.NewBroker()

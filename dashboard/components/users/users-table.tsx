@@ -131,7 +131,9 @@ export function UsersTable() {
       </div>
 
       {selectedId && (
-        <UserDetailPanel
+        // Панель «едет» вместе со скроллом: sticky под топбаром, своя прокрутка при переполнении.
+        <div className="lg:sticky lg:top-20 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto">
+          <UserDetailPanel
           userId={selectedId}
           onClose={() => setSelectedId(null)}
           onChanged={loadUsers}
@@ -139,7 +141,8 @@ export function UsersTable() {
             setSelectedId(null);
             void loadUsers();
           }}
-        />
+          />
+        </div>
       )}
     </div>
   );

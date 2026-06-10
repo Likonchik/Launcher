@@ -20,6 +20,7 @@ type Service struct {
 	jwtSecret          []byte
 	adminLogins        map[string]struct{}
 	autoAdminWhenEmpty bool
+	tokenTTL           time.Duration
 }
 
 type LoginResult struct {
@@ -29,14 +30,18 @@ type LoginResult struct {
 	Message   string      `json:"message"`
 }
 
-func NewService(db *gorm.DB, provider Provider, jwtSecret string, adminLogins []string, appEnv string) Service {
+func NewService(db *gorm.DB, provider Provider, jwtSecret string, adminLogins []string, appEnv string, tokenTTL time.Duration) Service {
 	normalizedAdminLogins := normalizeAdminLogins(adminLogins)
+	if tokenTTL <= 0 {
+		tokenTTL = 7 * 24 * time.Hour
+	}
 	return Service{
 		db:                 db,
 		provider:           provider,
 		jwtSecret:          []byte(jwtSecret),
 		adminLogins:        normalizedAdminLogins,
 		autoAdminWhenEmpty: len(normalizedAdminLogins) == 0 && normalizeLogin(appEnv) == "development",
+		tokenTTL:           tokenTTL,
 	}
 }
 
@@ -85,7 +90,7 @@ func (s Service) Login(ctx context.Context, login, password, totp string) (Login
 	}
 	user = savedUser
 
-	expiresAt := now.Add(12 * time.Hour)
+	expiresAt := now.Add(s.tokenTTL)
 	token, err := s.issueToken(user, expiresAt)
 	if err != nil {
 		return LoginResult{}, err

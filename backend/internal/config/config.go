@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -31,6 +32,8 @@ type Config struct {
 	AnticheatNativeLinux  string
 	AnticheatNativeWin    string
 	AnticheatKickSeverity int
+	// TokenTTL — срок жизни JWT-сессии (логин в лаунчере и админке).
+	TokenTTL time.Duration
 }
 
 func Load() Config {
@@ -67,6 +70,7 @@ func Load() Config {
 		AnticheatNativeLinux:  env("ANTICHEAT_NATIVE_LINUX", filepath.Join("data", "libanticheat.so")),
 		AnticheatNativeWin:    env("ANTICHEAT_NATIVE_WIN", filepath.Join("data", "anticheat.dll")),
 		AnticheatKickSeverity: atoiDefault(env("ANTICHEAT_KICK_SEVERITY", "7"), 7),
+		TokenTTL:              time.Duration(atoiDefault(env("TOKEN_TTL_HOURS", "168"), 168)) * time.Hour,
 	}
 
 	if cfg.JWTSecret == "dev-only-change-me" {

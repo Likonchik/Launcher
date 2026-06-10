@@ -38,7 +38,7 @@ func TestEnforcementFlow(t *testing.T) {
 	ygg := yggdrasil.NewService(db, keys, "http://example.com", "Test", "")
 
 	app := fiber.New()
-	authSvc := auth.NewService(db, auth.NewHTTPProvider(""), jwtSecret, nil, "test")
+	authSvc := auth.NewService(db, auth.NewHTTPProvider(""), jwtSecret, nil, "test", 0)
 	yggdrasil.NewHandler(ygg).RegisterRoutes(app, authSvc.RequireAuth())
 	NewHandler(NewService(db, acSecret, false, ygg.Store(), "")).RegisterRoutes(app, authSvc.RequireAuth())
 
