@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"os"
+	"time"
 
 	"launcher-backend/internal/adminapi"
 	"launcher-backend/internal/anticheat"
@@ -16,6 +17,7 @@ import (
 	"launcher-backend/internal/yggdrasil"
 
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
 )
 
 func main() {
@@ -40,8 +42,21 @@ func main() {
 
 	app := fiber.New(fiber.Config{
 		AppName: "Launcher Backend",
+		// Бэкенд стоит за nginx: настоящий IP клиента приходит в X-Forwarded-For.
+		ProxyHeader:      fiber.HeaderXForwardedFor,
+		TrustProxy:       true,
+		TrustProxyConfig: fiber.TrustProxyConfig{Loopback: true, LinkLocal: true, Private: true},
 	})
 	app.Use(middleware.CORS(cfg.AllowedOrigins))
+
+	// Брутфорс-защита: лимит по IP на эндпоинты, принимающие пароль.
+	authLimiter := limiter.New(limiter.Config{
+		Max:        10,
+		Expiration: time.Minute,
+	})
+	app.Use("/api/auth/login", authLimiter)
+	app.Use("/api/gml/auth", authLimiter)
+	app.Use("/api/yggdrasil/authserver/authenticate", authLimiter)
 
 	app.Get("/health", func(c fiber.Ctx) error {
 		return c.JSON(fiber.Map{
