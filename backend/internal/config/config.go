@@ -21,6 +21,7 @@ type Config struct {
 	AllowedOrigins      []string
 	AdminLogins         []string
 	ProfileStorageRoot  string
+	LauncherReleaseRoot string
 	TelegramChannel     string
 	PublicBaseURL       string
 	YggdrasilKeyPath    string
@@ -57,6 +58,10 @@ func Load() Config {
 		ProfileStorageRoot: env(
 			"PROFILE_STORAGE_ROOT",
 			filepath.Join("storage", "profiles"),
+		),
+		LauncherReleaseRoot: env(
+			"LAUNCHER_RELEASE_ROOT",
+			filepath.Join("storage", "releases"),
 		),
 		AllowedOrigins: splitCSV(env(
 			"ALLOWED_ORIGINS",
