@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { LayoutDashboard, LogOut, Newspaper, Package, Pickaxe, Shield, Users } from 'lucide-react';
+import { LayoutDashboard, LogOut, Newspaper, Package, Pickaxe, Rocket, Shield, Users } from 'lucide-react';
 import { clearToken } from '../../app/lib/api';
 
 export const navItems = [
@@ -12,6 +12,7 @@ export const navItems = [
   { href: '/profiles', label: 'Профили', icon: Package },
   { href: '/users', label: 'Пользователи', icon: Users },
   { href: '/news', label: 'Новости', icon: Newspaper },
+  { href: '/releases', label: 'Релизы', icon: Rocket },
   { href: '/anticheat', label: 'Античит', icon: Shield }
 ];
 
