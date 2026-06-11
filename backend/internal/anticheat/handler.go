@@ -2,6 +2,7 @@ package anticheat
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -82,6 +83,10 @@ func (h Handler) init(c fiber.Ctx) error {
 	// Запрос без заголовка — легаси-версия (≤0.1.0), считается "0.0.0".
 	if h.versionGate != nil {
 		minVersion, err := h.versionGate.MinMandatoryVersion(c.Context())
+		if err != nil {
+			// fail-open: при сбое БД гейт не блокирует игроков, но сбой должен быть виден.
+			slog.Warn("anticheat: version gate degraded (fail-open)", "error", err)
+		}
 		if err == nil && minVersion != "" {
 			clientVersion := c.Get("X-Launcher-Version")
 			if clientVersion == "" {
