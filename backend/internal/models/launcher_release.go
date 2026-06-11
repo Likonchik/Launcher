@@ -13,6 +13,7 @@ type LauncherRelease struct {
 	IsActive  bool                  `gorm:"not null;default:true" json:"isActive"`
 	Files     []LauncherReleaseFile `gorm:"foreignKey:ReleaseID" json:"files"`
 	CreatedAt time.Time             `json:"createdAt"`
+	UpdatedAt time.Time             `json:"updatedAt"`
 }
 
 // LauncherReleaseFile — бинарник релиза под конкретную платформу.
