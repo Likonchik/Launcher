@@ -502,9 +502,18 @@ export component AppWindow inherits Window {
             background: #242424;
         }
 
+        Image {
+            source: @image-url("../assets/account_circle.svg");
+            colorize: #b4b7bc;
+            width: 22px;
+            height: 22px;
+            x: 40px;
+            y: 157px;
+        }
+
         Text {
             text: "Логин";
-            x: 40px;
+            x: 70px;
             y: 158px;
             color: #b4b7bc;
             font-size: 18px;
@@ -522,9 +531,18 @@ export component AppWindow inherits Window {
             placeholder-text: "";
         }
 
+        Image {
+            source: @image-url("../assets/password.svg");
+            colorize: #b4b7bc;
+            width: 22px;
+            height: 22px;
+            x: 40px;
+            y: 277px;
+        }
+
         Text {
             text: "Пароль";
-            x: 40px;
+            x: 70px;
             y: 278px;
             color: #b4b7bc;
             font-size: 18px;
