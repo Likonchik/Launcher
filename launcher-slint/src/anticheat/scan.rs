@@ -68,7 +68,10 @@ fn running_processes() -> Vec<String> {
 fn running_processes() -> Vec<String> {
     use std::process::Command;
     let mut out = Vec::new();
-    if let Ok(output) = Command::new("tasklist").args(["/fo", "csv", "/nh"]).output() {
+    let mut tasklist = Command::new("tasklist");
+    tasklist.args(["/fo", "csv", "/nh"]);
+    crate::hide_console_window(&mut tasklist);
+    if let Ok(output) = tasklist.output() {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines() {
             // Формат CSV: "image.exe","pid",... — берём первое поле.

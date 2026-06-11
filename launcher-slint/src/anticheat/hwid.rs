@@ -76,25 +76,25 @@ fn collect_components() -> Vec<String> {
     let mut parts = Vec::new();
 
     // MachineGuid из реестра — стабильный идентификатор установки Windows.
-    if let Ok(output) = Command::new("reg")
-        .args([
-            "query",
-            r"HKLM\SOFTWARE\Microsoft\Cryptography",
-            "/v",
-            "MachineGuid",
-        ])
-        .output()
-    {
+    let mut reg = Command::new("reg");
+    reg.args([
+        "query",
+        r"HKLM\SOFTWARE\Microsoft\Cryptography",
+        "/v",
+        "MachineGuid",
+    ]);
+    crate::hide_console_window(&mut reg);
+    if let Ok(output) = reg.output() {
         if let Some(value) = parse_reg_value(&String::from_utf8_lossy(&output.stdout)) {
             parts.push(value);
         }
     }
 
     // UUID материнской платы через WMIC (есть на большинстве систем).
-    if let Ok(output) = Command::new("wmic")
-        .args(["csproduct", "get", "UUID"])
-        .output()
-    {
+    let mut wmic = Command::new("wmic");
+    wmic.args(["csproduct", "get", "UUID"]);
+    crate::hide_console_window(&mut wmic);
+    if let Ok(output) = wmic.output() {
         let text = String::from_utf8_lossy(&output.stdout);
         for line in text.lines().map(str::trim) {
             if !line.is_empty() && !line.eq_ignore_ascii_case("UUID") {

@@ -1,3 +1,7 @@
+// Windows: release-сборка — GUI-приложение без консольного окна.
+// В debug консоль оставляем для println-диагностики.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
@@ -36,6 +40,18 @@ const MAX_MEMORY_GB: i32 = 64;
 struct AppConfig {
     api_url: String,
 }
+
+/// Windows: прячет консольное окно дочернего консольного процесса (java, reg,
+/// tasklist, cmd) — у GUI-приложения каждый такой запуск иначе открывает окно.
+#[cfg(windows)]
+pub(crate) fn hide_console_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub(crate) fn hide_console_window(_command: &mut Command) {}
 
 #[derive(Clone, Default)]
 struct RuntimeState {
@@ -631,6 +647,7 @@ fn register_settings_handler(app: &AppWindow, state: Arc<Mutex<RuntimeState>>) {
             cmd.arg(&url);
             cmd
         };
+        hide_console_window(&mut command);
         let _ = command.spawn();
     });
 
@@ -1973,6 +1990,8 @@ fn launch_profile(
         process.args(&command[1..]);
     }
     process.current_dir(&paths.files_root);
+    // Иначе java.exe открыл бы собственное консольное окно рядом с игрой.
+    hide_console_window(&mut process);
     let mut child = process
         .spawn()
         .map_err(|err| format!("Не удалось запустить Minecraft: {}", err))?;
