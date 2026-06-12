@@ -29,6 +29,8 @@ services:
       DATABASE_URL: "postgres://launcher:${POSTGRES_PASSWORD:-launcher_dev_password}@postgres:5432/launcher?sslmode=disable"
       AUTH_MODE: "${AUTH_MODE:-local}"
       JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      # prod (.env на VPS): обязателен и != JWT_SECRET (P6). Пусто в dev → деривируется из JWT.
+      ANTICHEAT_SECRET: "${ANTICHEAT_SECRET:-}"
       ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://127.0.0.1:3000,http://localhost:3000}"
       # prod (.env на VPS): APP_ENV=production — сервер откажется стартовать с дев-секретами.
       APP_ENV: "${APP_ENV:-development}"
@@ -55,6 +57,9 @@ services:
       DATABASE_URL: "postgres://launcher:${POSTGRES_PASSWORD:-launcher_dev_password}@postgres:5432/launcher?sslmode=disable"
       AUTH_MODE: "${AUTH_MODE:-local}"
       APP_ENV: "${APP_ENV:-development}"
+      JWT_SECRET: "${JWT_SECRET:-change-me-in-production}"
+      # prod: обязателен и != JWT_SECRET (P6). bot тоже зовёт config.Validate() при старте.
+      ANTICHEAT_SECRET: "${ANTICHEAT_SECRET:-}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       ADMIN_TELEGRAM_IDS: "${ADMIN_TELEGRAM_IDS:-}"
       TOTP_ISSUER: "${TOTP_ISSUER:-Launcher Accounts}"
